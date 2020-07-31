@@ -22,12 +22,49 @@ pip install -U git+https://github.com/moskomule/anatome
 
 ## Available Tools
 
-- CCAs
-    - Raghu et al. NIPS2017 SVCCA
-    - Marcos et al. NeurIPS2018 PWCCA
-    - [ ] Kornblith et al. ICML2019 CKA
-- [ ] Fourier analysis
+###  CCAs: Compare representation of modules
 
+- Raghu et al. NIPS2017 SVCCA
+- Marcos et al. NeurIPS2018 PWCCA
+- [ ] Kornblith et al. ICML2019 CKA
+    
+```python
+from anatome import CCAHook
+model = resnet18()
+hook1 = CCAHook(model, "layer3.0.conv1")
+hook2 = CCAHook(model, "layer3.0.conv2")
+model.eval()
+with torch.no_grad():
+    model(torch.randn(120, 3, 224, 224))
+hook1.distance(hook2, size=8)
+```
+    
+### Loss Landscape Visualization
+
+- Li et al. NeurIPS2018 ([Original Implementation](https://github.com/tomgoldstein/loss-landscape))
+
+```python
+from anatome import landscape1d
+x, y = landscape1d(resnet18(),
+                   data,
+                   F.cross_entropy,
+                   x_range=(-1, 1),
+                   step_size=0.1)
+plot(x, y, ...)
+```
+
+### Fourier Analysis
+
+- Yin et al. NeurIPS 2019 etc.,
+
+```python
+from anatome import fourier_map
+map = fourier_map(resnet18(),
+                  data,
+                  F.cross_entropy,
+                  norm=4)
+imshow(map)
+```
 
 ## Citation
 

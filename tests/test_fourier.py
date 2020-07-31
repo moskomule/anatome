@@ -14,3 +14,4 @@ def test_landscape():
     data = (torch.randn(10, 3, 16, 16),
             torch.randint(2, (10,)))
     fourier.fourier_map(model, data, F.cross_entropy, 4)
+    fourier.fourier_map(model, data, F.cross_entropy, 4, (2, 2))
