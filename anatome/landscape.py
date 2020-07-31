@@ -62,8 +62,7 @@ def landscape1d(model: nn.Module,
     x_coord = torch.arange(x_range[0], x_range[1] + step_size, step_size, dtype=torch.float)
     x_direction = _filter_normed_random_direction(model)
     loss_values = torch.zeros_like(x_coord, device=torch.device('cpu'))
-    for i, x in tqdm(enumerate(x_coord.tolist()),
-                     ncols=80):
+    for i, x in enumerate(tqdm(x_coord.tolist(), ncols=80)):
         new_model = _get_perturbed_model(model, x_direction, x)
         loss_values[i] = _evaluate(new_model, data, criterion)
     return x_coord, loss_values
@@ -106,8 +105,11 @@ def landscape2d(model: nn.Module,
     x_direction = _filter_normed_random_direction(model)
     y_direction = _filter_normed_random_direction(model)
     loss_values = torch.zeros_like(x_coord, device=torch.device('cpu'))
-    for i, (x, y) in tqdm(enumerate(zip(x_coord.tolist(), y_coord.tolist())),
-                          ncols=80):
+    # To enable tqdm
+    for i, (x, y) in enumerate(zip(
+            tqdm(x_coord.tolist(), ncols=80),
+            y_coord.tolist())
+    ):
         new_model = _get_perturbed_model(model, (x_direction, y_direction), (x, y))
         loss_values[i] = _evaluate(new_model, data, criterion)
     return x_coord.view(shape), y_coord.view(shape), loss_values.view(shape)
