@@ -50,8 +50,10 @@ x, y = landscape1d(resnet18(),
                    F.cross_entropy,
                    x_range=(-1, 1),
                    step_size=0.1)
-plot(x, y, ...)
+plot(x, y)
 ```
+
+![](assets/landscape.svg)
 
 ### Fourier Analysis
 
@@ -65,6 +67,8 @@ map = fourier_map(resnet18(),
                   norm=4)
 imshow(map)
 ```
+
+![](assets/fourier.svg)
 
 ## Citation
 
