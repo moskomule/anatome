@@ -18,7 +18,7 @@ def cca_by_svd(x: torch.Tensor,
                y: torch.Tensor
                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """ CCA using only SVD.
-    For more details, check Press 2011 "Cannonical Correlation Clarified by Singular Value Decomposition"
+    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
     Args:
         x: input tensor of Shape DxH
@@ -43,7 +43,7 @@ def cca_by_qr(x: torch.Tensor,
               y: torch.Tensor
               ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """ CCA using QR and SVD.
-    For more details, check Press 2011 "Cannonical Correlation Clarified by Singular Value Decomposition"
+    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
     Args:
         x: input tensor of Shape DxH
@@ -66,7 +66,7 @@ def cca(x: torch.Tensor,
         y: torch.Tensor,
         backend: str
         ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """ Compute CCA
+    """ Compute CCA, Canonical Correlation Analysis
 
     Args:
         x: input tensor of Shape DxH
