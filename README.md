@@ -1,4 +1,4 @@
-# anatome
+# anatome ![](https://github.com/moskomule/anatome/workflows/pytest/badge.svg)
 
 Ἀνατομή is a PyTorch library to analyze internal representation of neural networks
 
@@ -22,7 +22,10 @@ pip install -U git+https://github.com/moskomule/anatome
 
 ## Available Tools
 
-- [ ] CCA
+- CCAs
+    - Raghu et al. NIPS2017 SVCCA
+    - Marcos et al. NeurIPS2018 PWCCA
+    - [ ] Kornblith et al. ICML2019 CKA
 - [ ] Fourier analysis
 
 
