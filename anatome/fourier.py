@@ -86,9 +86,8 @@ def fourier_map(model: nn.Module,
     else:
         h, w = fourier_map_size
     map = torch.zeros(h, w)
-    for u_i, l_i in tqdm(zip(torch.triu_indices(h, w).t(),
-                             torch.tril_indices(h, w).t()),
-                         ncols=80):
+    for u_i in tqdm(torch.triu_indices(h, w).t(), ncols=80):
+        l_i = u_i.flip(0)
         input = add_fourier_noise(u_i, input, norm, fourier_map_size)
         loss = _evaluate(model, (input, target), criterion)
         map[u_i] = loss
