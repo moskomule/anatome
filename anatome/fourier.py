@@ -88,8 +88,8 @@ def fourier_map(model: nn.Module,
     map = torch.zeros(h, w)
     for u_i in tqdm(torch.triu_indices(h, w).t(), ncols=80):
         l_i = u_i.flip(0)
-        input = add_fourier_noise(u_i, input, norm, fourier_map_size)
-        loss = _evaluate(model, (input, target), criterion)
-        map[u_i] = loss
-        map[l_i] = loss
+        noisy_input = add_fourier_noise(u_i, input, norm, fourier_map_size)
+        loss = _evaluate(model, (noisy_input, target), criterion)
+        map[u_i[0], u_i[1]] = loss
+        map[l_i[0], l_i[1]] = loss
     return map
