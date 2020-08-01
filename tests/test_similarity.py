@@ -45,7 +45,8 @@ def test_similarity_hook_linear():
     hook1.distance(hook2)
 
 
-def test_similarity_hook_conv2d():
+@pytest.mark.parametrize('resize_by', ['avg_pool', 'dft'])
+def test_similarity_hook_conv2d(resize_by):
     model1 = nn.Conv2d(3, 3, kernel_size=3)
     model2 = nn.Conv2d(3, 5, kernel_size=3)
     hook1 = similarity.SimilarityHook(model1, '')
@@ -55,7 +56,7 @@ def test_similarity_hook_conv2d():
         model1(input)
         model2(input)
 
-    hook1.distance(hook2, size=7)
+    hook1.distance(hook2, size=7, downsample_method=resize_by)
 
     with pytest.raises(RuntimeError):
-        hook1.distance(hook2, size=19)
+        hook1.distance(hook2, size=19, downsample_method=resize_by)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Tuple, Optional, Callable
 
+import numpy as np
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
@@ -287,7 +288,7 @@ class SimilarityHook(object):
 
         Args:
             other: Another hook
-            downsample_method: method for
+            downsample_method: method for downsampling. avg_pool or dft.
             size:
 
         Returns:
@@ -336,9 +337,20 @@ class SimilarityHook(object):
 
         if backend == 'avg_pool':
             input = F.adaptive_avg_pool2d(input, (size, size))
-            input = input.view(b, c, -1).permute(2, 0, 1)
-        else:
-            # todo: check SVCCA paper
-            pass
 
+        else:
+            # almost PyTorch implant of
+            # https://github.com/google/svcca/blob/master/dft_ccas.py
+            if input.size(2) != input.size(3):
+                raise RuntimeError('width and height of input needs to be equal')
+            h = input.size(2)
+            input_fft = input.rfft(2, normalized=True, onesided=False)
+            freqs = np.fft.fftfreq(h, d=1 / h)
+            idxs = torch.as_tensor((freqs >= -size / 2) & (freqs < size / 2),
+                                   device=input.device)
+            # BxCxHxWx2 -> BxCxhxwx2
+            input_fft = input_fft[..., idxs, :][..., idxs, :, :]
+            input = input_fft.irfft(2, normalized=True, onesided=False)
+
+        input = input.view(b, c, -1).permute(2, 0, 1)
         return input
