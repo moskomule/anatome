@@ -22,17 +22,17 @@ pip install -U git+https://github.com/moskomule/anatome
 
 ## Available Tools
 
-###  CCAs: Compare representation of modules
+###  Representation Similarity
 
 - [Raghu et al. NIPS2017 SVCCA](https://papers.nips.cc/paper/7188-svcca-singular-vector-canonical-correlation-analysis-for-deep-learning-dynamics-and-interpretability)
 - [Marcos et al. NeurIPS2018 PWCCA](https://papers.nips.cc/paper/7815-insights-on-representational-similarity-in-neural-networks-with-canonical-correlation)
-- [ ] Kornblith et al. ICML2019 CKA
+- [Kornblith et al. ICML2019 CKA](http://proceedings.mlr.press/v97/kornblith19a.html)
     
 ```python
-from anatome import CCAHook
+from anatome import SimilarityHook
 model = resnet18()
-hook1 = CCAHook(model, "layer3.0.conv1")
-hook2 = CCAHook(model, "layer3.0.conv2")
+hook1 = SimilarityHook(model, "layer3.0.conv1")
+hook2 = SimilarityHook(model, "layer3.0.conv2")
 model.eval()
 with torch.no_grad():
     model(data[0])

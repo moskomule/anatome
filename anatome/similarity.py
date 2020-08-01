@@ -4,19 +4,19 @@ from functools import partial
 from typing import Tuple, Optional, Callable
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import functional as F
 
 
-def _zero_mean(input: torch.Tensor,
+def _zero_mean(input: Tensor,
                dim: int
-               ) -> torch.Tensor:
+               ) -> Tensor:
     return input - input.mean(dim=dim, keepdim=True)
 
 
-def cca_by_svd(x: torch.Tensor,
-               y: torch.Tensor
-               ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def cca_by_svd(x: Tensor,
+               y: Tensor
+               ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using only SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
@@ -39,9 +39,9 @@ def cca_by_svd(x: torch.Tensor,
     return a, b, diag
 
 
-def cca_by_qr(x: torch.Tensor,
-              y: torch.Tensor
-              ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def cca_by_qr(x: Tensor,
+              y: Tensor
+              ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using QR and SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
@@ -62,10 +62,10 @@ def cca_by_qr(x: torch.Tensor,
     return a, b, diag
 
 
-def cca(x: torch.Tensor,
-        y: torch.Tensor,
+def cca(x: Tensor,
+        y: Tensor,
         backend: str
-        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        ) -> Tuple[Tensor, Tensor, Tensor]:
     """ Compute CCA, Canonical Correlation Analysis
 
     Args:
@@ -94,9 +94,9 @@ def cca(x: torch.Tensor,
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
 
 
-def _svd_reduction(input: torch.Tensor,
+def _svd_reduction(input: Tensor,
                    accept_rate: float
-                   ) -> torch.Tensor:
+                   ) -> Tensor:
     left, diag, right = torch.svd(input)
     full = diag.abs().sum()
     ratio = diag.abs().cumsum(dim=0) / full
@@ -107,16 +107,16 @@ def _svd_reduction(input: torch.Tensor,
     return input @ right[:, : num]
 
 
-def svcca_distance(x: torch.Tensor,
-                   y: torch.Tensor,
+def svcca_distance(x: Tensor,
+                   y: Tensor,
                    accept_rate: float,
                    backend: str
-                   ) -> torch.Tensor:
+                   ) -> Tensor:
     """ Singular Vector CCA proposed in Raghu et al. 2017.
 
     Args:
-        x: input tensor of Shape DxH
-        y: input tensor of Shape DxW
+        x: input tensor of Shape DxH, where D>H
+        y: input tensor of Shape DxW, where D>H
         accept_rate: 0.99
         backend: svd or qr
 
@@ -131,15 +131,15 @@ def svcca_distance(x: torch.Tensor,
     return 1 - diag.sum() / div
 
 
-def pwcca_distance(x: torch.Tensor,
-                   y: torch.Tensor,
+def pwcca_distance(x: Tensor,
+                   y: Tensor,
                    backend: str
-                   ) -> torch.Tensor:
+                   ) -> Tensor:
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
 
     Args:
-        x: input tensor of Shape DxH
-        y: input tensor of Shape DxW
+        x: input tensor of Shape DxH, where D>H
+        y: input tensor of Shape DxW, where D>H
         backend: svd or qr
 
     Returns:
@@ -152,12 +152,61 @@ def pwcca_distance(x: torch.Tensor,
     return 1 - alpha @ diag
 
 
-class CCAHook(object):
-    """ Hook to compute CCA distance between modules in given models ::
+def _debiased_dot_product_similarity(z: Tensor,
+                                     sum_row_x: Tensor,
+                                     sum_row_y: Tensor,
+                                     sq_norm_x: Tensor,
+                                     sq_norm_y: Tensor,
+                                     size: int
+                                     ) -> Tensor:
+    return (z
+            - size / (size - 2) * (sum_row_x @ sum_row_y)
+            + sq_norm_x * sq_norm_y / ((size - 1) * (size - 2)))
+
+
+def linear_cka_distance(x: Tensor,
+                        y: Tensor,
+                        reduce_bias: bool
+                        ) -> Tensor:
+    """ Linear CKA used in Kornblith et al. 19
+    
+    Args:
+        x: input tensor of Shape DxH
+        y: input tensor of Shape DxW
+        reduce_bias: debias CKA estimator, which might be helpful when D is limited
+
+    Returns:
+
+    """
+
+    if x.size(0) != y.size(0):
+        raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
+
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
+    dot_prod = (y.t() @ x).norm('fro').pow(2)
+    norm_x = (x.t() @ x).norm('fro')
+    norm_y = (y.t() @ y).norm('fro')
+
+    if reduce_bias:
+        size = x.size(0)
+        # (x @ x.t()).diag()
+        sum_row_x = torch.einsum('ij,ij->i', x, x)
+        sum_row_y = torch.einsum('ij,ij->i', y, y)
+        sq_norm_x = sum_row_x.sum()
+        sq_norm_y = sum_row_y.sum()
+        dot_prod = _debiased_dot_product_similarity(dot_prod, sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
+        norm_x = _debiased_dot_product_similarity(norm_x.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
+        norm_y = _debiased_dot_product_similarity(norm_y.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
+    return dot_prod / (norm_x * norm_y)
+
+
+class SimilarityHook(object):
+    """ Hook to compute CCAs and CKA distance between modules in given models ::
 
         model = resnet18()
-        hook1 = CCAHook(model, "layer3.0.conv1")
-        hook2 = CCAHook(model, "layer3.0.conv2")
+        hook1 = SimilarityHook(model, "layer3.0.conv1")
+        hook2 = SimilarityHook(model, "layer3.0.conv2")
         model.eval()
         with torch.no_grad():
             for _ in range(10):
@@ -167,14 +216,15 @@ class CCAHook(object):
     Args:
         model: Model
         module_name: Name of module appeared in `model.named_modules()`
-        cca_distance: the method to compute CCA distance. By default, PWCCA is used.
-        'pwcca', 'svcca' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
-        force_cpu: Force computing CCA on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
+        cca_distance: the method to compute CCA and CKA distance. By default, PWCCA is used.
+        'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
+        force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
     """
 
     _supported_dim = (2, 4)
     _default_backends = {'pwcca': partial(pwcca_distance, backend='svd'),
-                         'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd')}
+                         'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
+                         'lincka': partial(linear_cka_distance, reduce_bias=False)}
 
     def __init__(self,
                  model: nn.Module,
@@ -204,7 +254,7 @@ class CCAHook(object):
 
     @property
     def hooked_tensors(self
-                       ) -> torch.Tensor:
+                       ) -> Tensor:
         if self._hooked_tensors is None:
             raise RuntimeError('Run model in advance')
         return self._hooked_tensors
@@ -228,7 +278,7 @@ class CCAHook(object):
         self.module.register_forward_hook(hook)
 
     def distance(self,
-                 other: CCAHook,
+                 other: SimilarityHook,
                  *,
                  downsample_method: Optional[str] = 'avg_pool',
                  size: Optional[int] = None,
@@ -265,10 +315,10 @@ class CCAHook(object):
                                ).mean()
 
     @staticmethod
-    def _downsample_4d(input: torch.Tensor,
+    def _downsample_4d(input: Tensor,
                        size: int,
                        backend: str
-                       ) -> torch.Tensor:
+                       ) -> Tensor:
         """ Downsample 4D tensor of BxCxHxD to 3D tensor of {size^2}xBxC
         """
 
