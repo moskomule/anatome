@@ -13,9 +13,17 @@ EPS = 1e-8
 def _filter_normed_random_direction(model: nn.Module
                                     ) -> List[Tensor]:
     # applies filter normalization proposed in Li+2018
-    weights = [(w, torch.randn_like(w)) for w in model.parameters()]
-    weights = [d.mul_(w.norm() / (d.norm() + EPS)) for w, d in weights]
-    return weights
+    def _filter_norm(dirs: Tensor,
+                     params: Tensor
+                     ) -> Tensor:
+        d_norm = dirs.view(dirs.size(0), -1).norm(dim=-1)
+        p_norm = params.view(params.size(0), -1).norm(dim=-1)
+        ones = [1 for _ in range(dirs.dim() - 1)]
+        return dirs.mul_(p_norm.view(-1, *ones) / (d_norm.view(-1, *ones) + EPS))
+
+    directions = [(params, torch.randn_like(params)) for params in model.parameters()]
+    directions = [_filter_norm(dirs, params) for params, dirs in directions]
+    return directions
 
 
 def _get_perturbed_model(model: nn.Module,
