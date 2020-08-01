@@ -24,8 +24,8 @@ pip install -U git+https://github.com/moskomule/anatome
 
 ###  CCAs: Compare representation of modules
 
-- Raghu et al. NIPS2017 SVCCA
-- Marcos et al. NeurIPS2018 PWCCA
+- [Raghu et al. NIPS2017 SVCCA](https://papers.nips.cc/paper/7188-svcca-singular-vector-canonical-correlation-analysis-for-deep-learning-dynamics-and-interpretability)
+- [Marcos et al. NeurIPS2018 PWCCA](https://papers.nips.cc/paper/7815-insights-on-representational-similarity-in-neural-networks-with-canonical-correlation)
 - [ ] Kornblith et al. ICML2019 CKA
     
 ```python
@@ -35,22 +35,23 @@ hook1 = CCAHook(model, "layer3.0.conv1")
 hook2 = CCAHook(model, "layer3.0.conv2")
 model.eval()
 with torch.no_grad():
-    model(torch.randn(120, 3, 224, 224))
+    model(data[0])
 hook1.distance(hook2, size=8)
 ```
     
 ### Loss Landscape Visualization
 
-- Li et al. NeurIPS2018 ([Original Implementation](https://github.com/tomgoldstein/loss-landscape))
+- [Li et al. NeurIPS2018](https://papers.nips.cc/paper/7875-visualizing-the-loss-landscape-of-neural-nets)
 
 ```python
-from anatome import landscape1d
-x, y = landscape1d(resnet18(),
+from anatome import landscape2d
+x, y, z = landscape2d(resnet18(),
                    data,
                    F.cross_entropy,
                    x_range=(-1, 1),
+                   y_range=(-1, 1),
                    step_size=0.1)
-plot(x, y)
+imshow(z)
 ```
 
 ![](assets/landscape.svg)
