@@ -32,6 +32,9 @@ def _get_perturbed_model(model: nn.Module,
         perturbation = [d_0 * step_size for d_0 in direction]
 
     for param, pert in zip(new_model.parameters(), perturbation):
+        if param.data.dim() <= 1:
+            # ignore biasbn in the original code
+            continue
         param.data.add_(pert)
 
     return new_model

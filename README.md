@@ -54,7 +54,8 @@ x, y, z = landscape2d(resnet18(),
 imshow(z)
 ```
 
-![](assets/landscape.svg)
+![](assets/landscape2d.svg)
+![](assets/landscape3d.svg)
 
 ### Fourier Analysis
 
