@@ -3,10 +3,11 @@ from __future__ import annotations
 from functools import partial
 from typing import Tuple, Optional, Callable
 
-import numpy as np
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
+
+from .fourier import fftfreq
 
 
 def _zero_mean(input: Tensor,
@@ -345,11 +346,10 @@ class SimilarityHook(object):
                 raise RuntimeError('width and height of input needs to be equal')
             h = input.size(2)
             input_fft = input.rfft(2, normalized=True, onesided=False)
-            freqs = np.fft.fftfreq(h, d=1 / h)
-            idxs = torch.as_tensor((freqs >= -size / 2) & (freqs < size / 2),
-                                   device=input.device)
+            freqs = fftfreq(h, 1 / h, device=input.device)
+            idx = (freqs >= -size / 2) & (freqs < size / 2)
             # BxCxHxWx2 -> BxCxhxwx2
-            input_fft = input_fft[..., idxs, :][..., idxs, :, :]
+            input_fft = input_fft[..., idx, :][..., idx, :, :]
             input = input_fft.irfft(2, normalized=True, onesided=False)
 
         input = input.view(b, c, -1).permute(2, 0, 1)
