@@ -235,7 +235,7 @@ class SimilarityHook(object):
                  force_cpu: bool = False,
                  ) -> None:
 
-        if isinstance(model, (nn.DataParallel, nn.DistributedDataParallel)):
+        if isinstance(model, (nn.DataParallel, nn.parallel.DistributedDataParallel)):
             raise RuntimeWarning('model is nn.DataParallel or nn.DistributedDataParallel. '
                                  'SimilarityHook may causes unexpected behavior.')
 
