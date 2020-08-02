@@ -6,7 +6,7 @@ This project is under (hopefully) active development and the codebase is subject
 
 ## Installation
 
-anatome requires
+`anatome` requires
 
 ```
 Python>=3.8.0
@@ -14,7 +14,7 @@ PyTorch>=1.6.0
 torchvision>=0.7.0
 ```
 
-To install anatome, run
+After the installation of PyTorch, install `anatome` as follows:
 
 ```
 pip install -U git+https://github.com/moskomule/anatome
@@ -24,9 +24,11 @@ pip install -U git+https://github.com/moskomule/anatome
 
 ###  Representation Similarity
 
+To measure the similarity of learned representation, `anatome.SimilarityHook` is a useful tool. Currently, the following methods are implemented. 
+
 - [Raghu et al. NIPS2017 SVCCA](https://papers.nips.cc/paper/7188-svcca-singular-vector-canonical-correlation-analysis-for-deep-learning-dynamics-and-interpretability)
 - [Marcos et al. NeurIPS2018 PWCCA](https://papers.nips.cc/paper/7815-insights-on-representational-similarity-in-neural-networks-with-canonical-correlation)
-- [Kornblith et al. ICML2019 CKA](http://proceedings.mlr.press/v97/kornblith19a.html)
+- [Kornblith et al. ICML2019 Linear CKA](http://proceedings.mlr.press/v97/kornblith19a.html)
     
 ```python
 from anatome import SimilarityHook
@@ -46,11 +48,11 @@ hook1.distance(hook2, size=8)
 ```python
 from anatome import landscape2d
 x, y, z = landscape2d(resnet18(),
-                   data,
-                   F.cross_entropy,
-                   x_range=(-1, 1),
-                   y_range=(-1, 1),
-                   step_size=0.1)
+                      data,
+                      F.cross_entropy,
+                      x_range=(-1, 1),
+                      y_range=(-1, 1),
+                      step_size=0.1)
 imshow(z)
 ```
 

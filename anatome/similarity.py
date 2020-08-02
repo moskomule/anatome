@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Tuple, Optional, Callable
+from typing import Tuple, Optional, Callable, List
 
 import torch
 from torch import nn, Tensor
@@ -217,7 +217,7 @@ class SimilarityHook(object):
 
     Args:
         model: Model
-        module_name: Name of module appeared in `model.named_modules()`
+        name: Name of module appeared in `model.named_modules()`
         cca_distance: the method to compute CCA and CKA distance. By default, PWCCA is used.
         'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
         force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
@@ -230,28 +230,54 @@ class SimilarityHook(object):
 
     def __init__(self,
                  model: nn.Module,
-                 module_name: str,
+                 name: str,
                  cca_distance: Optional[str or Callable] = None,
                  force_cpu: bool = False,
                  ) -> None:
 
+        if isinstance(model, (nn.DataParallel, nn.DistributedDataParallel)):
+            raise RuntimeWarning('model is nn.DataParallel or nn.DistributedDataParallel. '
+                                 'SimilarityHook may causes unexpected behavior.')
+
         self.model = model
-        self.module = {k: v for k, v in self.model.named_modules()}[module_name]
+        self.module = {k: v for k, v in self.model.named_modules()}[name]
         if cca_distance is None or isinstance(cca_distance, str):
             cca_distance = self._default_backends[cca_distance or 'pwcca']
         self.cca_function = cca_distance
-
         self.force_cpu = force_cpu
         if self.force_cpu:
             # fully utilize CPUs available
             from multiprocessing import cpu_count
             torch.set_num_threads(cpu_count())
 
+        self.device = None
         self._hooked_tensors = None
-        self.register_hook()
+        self._register_hook()
+
+    def _register_hook(self
+                       ) -> None:
+        def hook(*args):
+            output = args[2]
+            if output.dim() not in self._supported_dim:
+                raise RuntimeError(f'CCAHook currently supports tensors of dimension {self._supported_dim}, '
+                                   f'but got {output.dim()} instead.')
+
+            self.device = output.device
+            # store intermediate tensors on CPU to avoid possible CUDA OOM
+            output = output.cpu()
+
+            if self._hooked_tensors is None:
+                self._hooked_tensors = output
+            else:
+                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0)
+
+        self.module.register_forward_hook(hook)
 
     def clear(self
               ) -> None:
+        """ Clear stored tensors
+        """
+
         self._hooked_tensors = None
 
     @property
@@ -261,23 +287,34 @@ class SimilarityHook(object):
             raise RuntimeError('Run model in advance')
         return self._hooked_tensors
 
-    def register_hook(self
-                      ) -> None:
-        def hook(*args):
-            output = args[2]
-            if output.dim() not in self._supported_dim:
-                raise RuntimeError(f'CCAHook currently supports tensors of dimension {self._supported_dim}, '
-                                   f'but got {output.dim()} instead.')
+    @staticmethod
+    def create_hooks(model: nn.Module,
+                     names: List[str],
+                     cca_distance: Optional[str or Callable] = None,
+                     force_cpu: bool = False,
+                     ) -> List[SimilarityHook]:
+        """ Create list of hooks from names. ::
 
-            if self.force_cpu:
-                output = output.cpu()
+        hooks1 = SimilarityHooks(model1, ['name1', ...])
+        hooks2 = SimilarityHooks(model2, ['name1', ...])
+        with torch.no_grad():
+            model1(input)
+            model2(input)
+        [[hook1.distance(hook2) for hook2 in hooks2]
+                                for hook1 in hooks1]
 
-            if self._hooked_tensors is None:
-                self._hooked_tensors = output
-            else:
-                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0)
+        Args:
+            model: Model
+            names: List of names of module appeared in `model.named_modules()`
+            cca_distance: the method to compute CCA and CKA distance. By default, PWCCA is used.
+            'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
+            force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
 
-        self.module.register_forward_hook(hook)
+        Returns: List of hooks
+
+        """
+
+        return [SimilarityHook(model, name, cca_distance, force_cpu) for name in names]
 
     def distance(self,
                  other: SimilarityHook,
@@ -298,6 +335,10 @@ class SimilarityHook(object):
 
         self_tensor = self.hooked_tensors
         other_tensor = other.hooked_tensors
+        if not self.force_cpu:
+            # hooked_tensors is CPU tensor, so need to device
+            self_tensor = self_tensor.to(self.device)
+            other_tensor = other_tensor.to(self.device)
         if self_tensor.size(0) != other_tensor.size(0):
             raise RuntimeError('0th dimension of hooked tensors are different')
         if self_tensor.dim() != other_tensor.dim():
@@ -314,7 +355,7 @@ class SimilarityHook(object):
             return torch.stack([self.cca_function(s, o)
                                 for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
                                 ]
-                               ).mean()
+                               ).mean().item()
 
     @staticmethod
     def _downsample_4d(input: Tensor,
