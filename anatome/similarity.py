@@ -7,7 +7,7 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from .fourier import fftfreq
+from .utils import fftfreq
 
 
 def _zero_mean(input: Tensor,

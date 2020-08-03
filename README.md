@@ -2,7 +2,7 @@
 
 Ἀνατομή is a PyTorch library to analyze internal representation of neural networks
 
-This project is under (hopefully) active development and the codebase is subject to change.
+This project is under active development and the codebase is subject to change.
 
 ## Installation
 
