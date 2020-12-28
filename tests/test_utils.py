@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from anatome import utils
@@ -17,3 +18,13 @@ def test_fft_shift():
     fft = utils.fft_shift(input.rfft(2, normalized=True, onesided=False))
     ifft = utils.ifft_shift(fft).irfft(2, normalized=True, onesided=False)
     assert torch.allclose(input, ifft, atol=1e-6)
+
+
+@pytest.mark.skipif(not utils.HAS_FFT_MODULE and hasattr(torch, "rfft"), reason="")
+@pytest.mark.parametrize("onesided", [False, True])
+@pytest.mark.parametrize("normalized", [False, True])
+@pytest.mark.parametrize("signal_ndim", [1, 2, 3])
+def test_rfft(signal_ndim, normalized, onesided):
+    input = torch.randn(1, 3, 8, 8)
+    assert torch.allclose(input.rfft(signal_ndim, normalized, onesided),
+                          utils._rfft(input, signal_ndim, normalized, onesided), atol=1e-4)

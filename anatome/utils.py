@@ -1,9 +1,13 @@
-from typing import Tuple, Callable, Optional
+from importlib.metadata import version
+from typing import Callable, Optional, Tuple
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
 AUTO_CAST = False
+HAS_FFT_MODULE = (version("torch") >= "1.7.0")
+if HAS_FFT_MODULE:
+    import torch.fft
 
 
 def use_auto_cast() -> None:
@@ -93,3 +97,39 @@ def fftfreq(window_length: int,
     results[:n] = torch.arange(0, n, dtype=dtype, device=device)
     results[n:] = torch.arange(-(window_length // 2), 0, dtype=dtype, device=device)
     return results * val
+
+
+def _rfft(self: Tensor,
+          signal_ndim: int,
+          normalized: bool = False,
+          onesided: bool = True
+          ) -> Tensor:
+    # old-day's torch.rfft
+    if not HAS_FFT_MODULE:
+        return torch.rfft(self, signal_ndim, normalized, onesided)
+
+    if signal_ndim > 4:
+        raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")
+
+    m = torch.fft.rfftn if onesided else torch.fft.fftn
+    dim = [-3, -2, -1][signal_ndim - 1:]
+    return torch.view_as_real(m(self, dim=dim, norm="ortho" if normalized else None))
+
+
+def _irfft(self: Tensor,
+           signal_ndim: int,
+           normalized: bool = False,
+           onesided: bool = True,
+           ) -> Tensor:
+    # old-day's torch.irfft
+    if not HAS_FFT_MODULE:
+        return torch.irfft(self, signal_ndim, normalized, onesided)
+
+    if signal_ndim > 4:
+        raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")
+    if not torch.is_complex(self):
+        self = torch.view_as_complex(self)
+
+    m = torch.fft.irfftn if onesided else torch.fft.ifftn
+    dim = [-3, -2, -1][signal_ndim - 1:]
+    return m(self, dim=dim, norm="ortho" if normalized else None)

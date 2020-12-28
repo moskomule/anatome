@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Tuple, Optional, Callable, List
+from typing import Callable, List, Optional, Tuple
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .utils import fftfreq
+from .utils import fftfreq, _irfft, _rfft
 
 
 def _zero_mean(input: Tensor,
@@ -327,7 +327,7 @@ class SimilarityHook(object):
         Args:
             other: Another hook
             downsample_method: method for downsampling. avg_pool or dft.
-            size:
+            size: size of the feature map after downsampling
 
         Returns:
 
@@ -386,12 +386,12 @@ class SimilarityHook(object):
             if input.size(2) != input.size(3):
                 raise RuntimeError('width and height of input needs to be equal')
             h = input.size(2)
-            input_fft = input.rfft(2, normalized=True, onesided=False)
+            input_fft = _rfft(input, 2, normalized=True, onesided=False)
             freqs = fftfreq(h, 1 / h, device=input.device)
             idx = (freqs >= -size / 2) & (freqs < size / 2)
             # BxCxHxWx2 -> BxCxhxwx2
             input_fft = input_fft[..., idx, :][..., idx, :, :]
-            input = input_fft.irfft(2, normalized=True, onesided=False)
+            input = _irfft(input_fft, 2, normalized=True, onesided=False)
 
         input = input.view(b, c, -1).permute(2, 0, 1)
         return input

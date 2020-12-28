@@ -1,12 +1,11 @@
-from typing import Tuple, Callable, Optional, List
+from typing import Callable, List, Optional, Tuple
 
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from .utils import _evaluate, _normalize, _denormalize
-from .utils import ifft_shift
+from .utils import _denormalize, _evaluate, _normalize, ifft_shift, _irfft
 
 
 def add_fourier_noise(idx: Tuple[int, int],
@@ -36,7 +35,7 @@ def add_fourier_noise(idx: Tuple[int, int],
     noise = images.new_zeros(1, h, w, 2)
     noise[:, idx[0], idx[1]] = 1
     noise[:, h - 1 - idx[0], w - 1 - idx[1]] = 1
-    recon = ifft_shift(noise).irfft(2, normalized=True, onesided=False).unsqueeze(0)
+    recon = _irfft(ifft_shift(noise), 2, normalized=True, onesided=False).unsqueeze(0)
     recon.div_(recon.norm(p=2)).mul_(norm)
     if size is not None:
         recon = F.interpolate(recon, images.shape[2:])
