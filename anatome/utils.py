@@ -132,4 +132,5 @@ def _irfft(self: Tensor,
 
     m = torch.fft.irfftn if onesided else torch.fft.ifftn
     dim = [-3, -2, -1][3 - signal_ndim:]
-    return m(self, dim=dim, norm="ortho" if normalized else None)
+    out = m(self, dim=dim, norm="ortho" if normalized else None)
+    return out.real if torch.is_complex(out) else out
