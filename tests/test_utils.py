@@ -23,7 +23,7 @@ def test_fft_shift():
 @pytest.mark.skipif(not utils.HAS_FFT_MODULE and hasattr(torch, "rfft"), reason="")
 @pytest.mark.parametrize("onesided", [False, True])
 @pytest.mark.parametrize("normalized", [False, True])
-@pytest.mark.parametrize("signal_ndim", [1, 2, 3])
+@pytest.mark.parametrize("signal_ndim", [2])
 def test_rfft(signal_ndim, normalized, onesided):
     input = torch.randn(4, 3, 8, 8)
     assert torch.allclose(input.rfft(signal_ndim, normalized, onesided),

@@ -112,7 +112,7 @@ def _rfft(self: Tensor,
         raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")
 
     m = torch.fft.rfftn if onesided else torch.fft.fftn
-    dim = [-3, -2, -1][signal_ndim - 1:]
+    dim = [-3, -2, -1][3 - signal_ndim:]
     return torch.view_as_real(m(self, dim=dim, norm="ortho" if normalized else None))
 
 
@@ -131,5 +131,5 @@ def _irfft(self: Tensor,
         self = torch.view_as_complex(self)
 
     m = torch.fft.irfftn if onesided else torch.fft.ifftn
-    dim = [-3, -2, -1][signal_ndim - 1:]
+    dim = [-3, -2, -1][3 - signal_ndim:]
     return torch.view_as_real(m(self, dim=dim, norm="ortho" if normalized else None))
