@@ -132,4 +132,4 @@ def _irfft(self: Tensor,
 
     m = torch.fft.irfftn if onesided else torch.fft.ifftn
     dim = [-3, -2, -1][signal_ndim - 1:]
-    return m(self, dim=dim, norm="ortho" if normalized else None)
+    return torch.view_as_real(m(self, dim=dim, norm="ortho" if normalized else None))

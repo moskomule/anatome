@@ -27,4 +27,4 @@ def test_fft_shift():
 def test_rfft(signal_ndim, normalized, onesided):
     input = torch.randn(4, 3, 8, 8)
     assert torch.allclose(input.rfft(signal_ndim, normalized, onesided),
-                          utils._rfft(input, signal_ndim, normalized, onesided), atol=1e-4)
+                          utils._rfft(input, signal_ndim, normalized, onesided), atol=1e-3)
