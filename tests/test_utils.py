@@ -26,5 +26,8 @@ def test_fft_shift():
 @pytest.mark.parametrize("signal_ndim", [2])
 def test_rfft(signal_ndim, normalized, onesided):
     input = torch.randn(4, 3, 8, 8)
-    assert torch.allclose(input.rfft(signal_ndim, normalized, onesided),
-                          utils._rfft(input, signal_ndim, normalized, onesided), atol=1e-3)
+    assert torch.allclose(torch.rfft(input, signal_ndim, normalized, onesided),
+                          utils._rfft(input, signal_ndim, normalized, onesided), atol=1e-4)
+    assert torch.allclose(utils._irfft(utils._rfft(input, signal_ndim, normalized, onesided),
+                                       signal_ndim, normalized, onesided),
+                          input, atol=1e-4)
