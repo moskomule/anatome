@@ -22,31 +22,35 @@ pip install -U git+https://github.com/moskomule/anatome
 
 ## Available Tools
 
-###  Representation Similarity
+### Representation Similarity
 
-To measure the similarity of learned representation, `anatome.SimilarityHook` is a useful tool. Currently, the following methods are implemented. 
+To measure the similarity of learned representation, `anatome.SimilarityHook` is a useful tool. Currently, the following
+methods are implemented.
 
 - [Raghu et al. NIPS2017 SVCCA](https://papers.nips.cc/paper/7188-svcca-singular-vector-canonical-correlation-analysis-for-deep-learning-dynamics-and-interpretability)
 - [Marcos et al. NeurIPS2018 PWCCA](https://papers.nips.cc/paper/7815-insights-on-representational-similarity-in-neural-networks-with-canonical-correlation)
 - [Kornblith et al. ICML2019 Linear CKA](http://proceedings.mlr.press/v97/kornblith19a.html)
-    
+
 ```python
 from anatome import SimilarityHook
+
 model = resnet18()
 hook1 = SimilarityHook(model, "layer3.0.conv1")
 hook2 = SimilarityHook(model, "layer3.0.conv2")
 model.eval()
 with torch.no_grad():
     model(data[0])
+# downsampling to (size, size) may be helpful
 hook1.distance(hook2, size=8)
 ```
-    
+
 ### Loss Landscape Visualization
 
 - [Li et al. NeurIPS2018](https://papers.nips.cc/paper/7875-visualizing-the-loss-landscape-of-neural-nets)
 
 ```python
 from anatome import landscape2d
+
 x, y, z = landscape2d(resnet18(),
                       data,
                       F.cross_entropy,
@@ -65,6 +69,7 @@ imshow(z)
 
 ```python
 from anatome import fourier_map
+
 map = fourier_map(resnet18(),
                   data,
                   F.cross_entropy,
