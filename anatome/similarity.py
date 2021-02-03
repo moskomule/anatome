@@ -200,7 +200,7 @@ def linear_cka_distance(x: Tensor,
         dot_prod = _debiased_dot_product_similarity(dot_prod, sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
         norm_x = _debiased_dot_product_similarity(norm_x.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
         norm_y = _debiased_dot_product_similarity(norm_y.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
-    return dot_prod / (norm_x * norm_y)
+    return 1 - dot_prod / (norm_x * norm_y)
 
 
 class SimilarityHook(object):
