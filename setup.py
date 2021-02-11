@@ -8,7 +8,7 @@ install_requires = [
 
 setup(
     name='anatome',
-    version='0.0.1',
+    version='0.0.2',
     description='Ἀνατομή is a PyTorch library to analyze representation of neural networks',
     author='Ryuichiro Hataya',
     author_email='hataya@keio.jp',
