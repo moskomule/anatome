@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .utils import _irfft, _rfft, fftfreq
+from .utils import _irfft, _rfft, fftfreq, _svd
 
 
 def _zero_mean(input: Tensor,
@@ -31,10 +31,10 @@ def cca_by_svd(x: Tensor,
     """
 
     # torch.svd(x)[1] is vector
-    u_1, s_1, v_1 = torch.linalg.svd(x)
-    u_2, s_2, v_2 = torch.linalg.svd(y)
+    u_1, s_1, v_1 = _svd(x)
+    u_2, s_2, v_2 = _svd(y)
     uu = u_1.t() @ u_2
-    u, diag, v = torch.linalg.svd(uu)
+    u, diag, v = _svd(uu)
     # v @ s.diag() = v * s.view(-1, 1), but much faster
     a = (v_1 * s_1.reciprocal_().unsqueeze_(0)) @ u
     b = (v_2 * s_2.reciprocal_().unsqueeze_(0)) @ v
@@ -58,7 +58,7 @@ def cca_by_qr(x: Tensor,
     q_1, r_1 = torch.qr(x)
     q_2, r_2 = torch.qr(y)
     qq = q_1.t() @ q_2
-    u, diag, v = torch.linalg.svd(qq)
+    u, diag, v = _svd(qq)
     a = r_1.inverse() @ u
     b = r_2.inverse() @ v
     return a, b, diag
@@ -99,7 +99,7 @@ def cca(x: Tensor,
 def _svd_reduction(input: Tensor,
                    accept_rate: float
                    ) -> Tensor:
-    left, diag, right = torch.linalg.svd(input)
+    left, diag, right = _svd(input)
     full = diag.abs().sum()
     ratio = diag.abs().cumsum(dim=0) / full
     num = torch.where(ratio < accept_rate,
