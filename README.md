@@ -9,9 +9,9 @@ This project is under active development and the codebase is subject to change.
 `anatome` requires
 
 ```
-Python>=3.8.0
-PyTorch>=1.6.0
-torchvision>=0.7.0
+Python>=3.9.0
+PyTorch>=1.9.0
+torchvision>=0.10.0
 ```
 
 After the installation of PyTorch, install `anatome` as follows:
