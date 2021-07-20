@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .utils import _irfft, _rfft, fftfreq, _svd
+from .utils import _irfft, _rfft, _svd, fftfreq
 
 
 def _zero_mean(input: Tensor,
@@ -244,6 +244,7 @@ class SimilarityHook(object):
         if cca_distance is None or isinstance(cca_distance, str):
             cca_distance = self._default_backends[cca_distance or 'pwcca']
         self.cca_function = cca_distance
+        self.name = name
         self.force_cpu = force_cpu
         if self.force_cpu:
             # fully utilize CPUs available
@@ -269,7 +270,7 @@ class SimilarityHook(object):
             if self._hooked_tensors is None:
                 self._hooked_tensors = output
             else:
-                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0)
+                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0).contiguous()
 
         self.module.register_forward_hook(hook)
 
@@ -347,7 +348,10 @@ class SimilarityHook(object):
         if self_tensor.dim() == 2:
             return self.cca_function(self_tensor, other_tensor).item()
         else:
-            if size is not None:
+            if size is None:
+                self_tensor = self_tensor.flatten(2).contiguous()
+                other_tensor = other_tensor.flatten(2).contiguous()
+            else:
                 downsample_method = downsample_method or 'avg_pool'
                 self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
                 other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
@@ -369,6 +373,9 @@ class SimilarityHook(object):
 
         # todo: what if channel-last?
         b, c, h, w = input.size()
+
+        if (size, size) == (h, w):
+            return input.flatten(2).permute(2, 0, 1)
 
         if (size, size) > (h, w):
             raise RuntimeError(f'size is expected to be smaller than h or w, but got {h=}, {w=}.')
@@ -392,5 +399,6 @@ class SimilarityHook(object):
             input_fft = input_fft[..., idx, :][..., idx, :, :]
             input = _irfft(input_fft, 2, normalized=True, onesided=False)
 
-        input = input.view(b, c, -1).permute(2, 0, 1)
+        # BxCxHxW -> (HW)xBxC
+        input = input.flatten(2).permute(2, 0, 1)
         return input
