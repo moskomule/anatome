@@ -20,7 +20,7 @@ def use_auto_cast() -> None:
 def _svd(input: torch.Tensor
          ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     # torch.svd style
-    U, S, Vh = torch.linalg.svd(input)
+    U, S, Vh = torch.linalg.svd(input, full_matrices=False)
     V = Vh.transpose(-2, -1)
     return U, S, V
 
