@@ -16,6 +16,14 @@ def _zero_mean(input: Tensor,
     return input - input.mean(dim=dim, keepdim=True)
 
 
+def _check_shape_equal(x: Tensor,
+                       y: Tensor,
+                       dim: int
+                       ):
+    if x.size(dim) != y.size(dim):
+        raise ValueError(f'x.size({dim}) == y.size({dim}) is expected, but got {x.size(dim)=}, {y.size(dim)=} instead.')
+
+
 def cca_by_svd(x: Tensor,
                y: Tensor
                ) -> Tuple[Tensor, Tensor, Tensor]:
@@ -79,8 +87,7 @@ def cca(x: Tensor,
 
     """
 
-    if x.size(0) != y.size(0):
-        raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
+    _check_shape_equal(x, y, 0)
 
     if x.size(0) < x.size(1):
         raise ValueError(f'x.size(0) >= x.size(1) is expected, but got {x.size()=}.')
@@ -181,8 +188,7 @@ def linear_cka_distance(x: Tensor,
 
     """
 
-    if x.size(0) != y.size(0):
-        raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
+    _check_shape_equal(x, y, 0)
 
     x = _zero_mean(x, dim=0)
     y = _zero_mean(y, dim=0)
@@ -215,6 +221,8 @@ def orthogonal_procrustes_distance(x: Tensor,
     Returns:
 
     """
+    _check_shape_equal(x, y, 0)
+
     frobenius_norm = partial(torch.linalg.norm, ord="fro")
     nuclear_norm = partial(torch.linalg.norm, ord="nuc")
 
