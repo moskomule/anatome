@@ -218,10 +218,10 @@ def orthogonal_procrustes_distance(x: Tensor,
     frobenius_norm = partial(torch.linalg.norm, ord="fro")
     nuclear_norm = partial(torch.linalg.norm, ord="nuc")
 
-    x = _zero_mean(x, dim=0) / frobenius_norm(x)
-    y = _zero_mean(y, dim=0) / frobenius_norm(x)
-    x = frobenius_norm(x) ** 2
-    y = frobenius_norm(y) ** 2
+    x = _zero_mean(x, dim=0)
+    x /= frobenius_norm(x)
+    y = _zero_mean(y, dim=0)
+    y /= frobenius_norm(y)
     # frobenius_norm(x) = 1, frobenius_norm(y) = 1
     # 0.5*d_proc(x, y)
     return 1 - nuclear_norm(x.t() @ y)
