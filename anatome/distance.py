@@ -63,8 +63,8 @@ def cca_by_qr(x: Tensor,
 
     """
 
-    q_1, r_1 = torch.qr(x)
-    q_2, r_2 = torch.qr(y)
+    q_1, r_1 = torch.linalg.qr(x)
+    q_2, r_2 = torch.linalg.qr(y)
     qq = q_1.t() @ q_2
     u, diag, v = _svd(qq)
     a = r_1.inverse() @ u
