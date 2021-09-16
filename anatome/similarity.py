@@ -96,8 +96,8 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
+    x = _matrix_normalize(x, dim=0)
+    y = _matrix_normalize(y, dim=0)
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
 
 
@@ -189,8 +189,8 @@ def linear_cka_distance(x: Tensor,
     if x.size(0) != y.size(0):
         raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
 
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
+    x = _matrix_normalize(x, dim=0)
+    y = _matrix_normalize(y, dim=0)
     dot_prod = (y.t() @ x).norm('fro').pow(2)
     norm_x = (x.t() @ x).norm('fro')
     norm_y = (y.t() @ y).norm('fro')
