@@ -15,6 +15,11 @@ def _zero_mean(input: Tensor,
                ) -> Tensor:
     return input - input.mean(dim=dim, keepdim=True)
 
+def _matrix_normalize(input: Tensor,
+               dim: int
+               ) -> Tensor:
+    from torch.linalg import norm 
+    return input - input.mean(dim=dim, keepdim=True) / norm(input, 'fro')  
 
 def cca_by_svd(x: Tensor,
                y: Tensor
