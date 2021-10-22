@@ -90,9 +90,11 @@ def cca(x: Tensor,
     Returns: x-side coefficients, y-side coefficients, diagonal
 
     """
-
+    print(f'{x.size()=}')
+    # - cca needs both matrices to have equal number of points *always*
     _check_shape_equal(x, y, 0)
 
+    # -
     # todo: tries to enforce # data points is larger than dimension?
     if x.size(0) < x.size(1):
         raise ValueError(f'x.size(0) >= x.size(1) is expected, but got {x.size()=}.')
@@ -102,6 +104,7 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
+    # - do cca
     x = _matrix_normalize(x, dim=0)
     y = _matrix_normalize(y, dim=0)
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)

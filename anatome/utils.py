@@ -22,6 +22,8 @@ def _svd(input: torch.Tensor
     # torch.svd style
     U, S, Vh = torch.linalg.svd(input, full_matrices=False)
     V = Vh.transpose(-2, -1)
+    # U, S, Vh = torch.svd(input)
+    # U, S, V = torch.svd(input)
     return U, S, V
 
 
