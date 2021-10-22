@@ -48,8 +48,7 @@ with torch.no_grad():
 hook1.distance(hook2, size=8)
 hook1.clear()
 hook2.clear()
-remove_hook(mdl1)
-remove_hook(mdl2)
+remove_hook(model)
 ```
 
 ### Loss Landscape Visualization
