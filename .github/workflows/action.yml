@@ -10,13 +10,12 @@ jobs:
 
     strategy:
       matrix:
-        python: [ '3.8' ]
-        torch: [ 'torch==1.6.0+cpu torchvision==0.7.0+cpu -f https://download.pytorch.org/whl/torch_stable.html',
-                 'torch==1.7.1+cpu torchvision==0.8.2+cpu -f https://download.pytorch.org/whl/torch_stable.html' ]
+        python: [ '3.9' ]
+        torch: [ 'torch==1.9.0+cpu torchvision==0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html' ]
 
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-python@v1
+      - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python }}
 
