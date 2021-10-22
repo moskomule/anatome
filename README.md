@@ -4,6 +4,15 @@
 
 This project is under active development and the codebase is subject to change.
 
+Note the name of the pypi package is `my-anatome` but the python import is done with
+the original name `import anatome`.
+Test via:
+```angular2html
+python -c "import anatome.my_utils as my_utils;my_utils.hello()"
+```
+
+credit to original library: https://github.com/moskomule/anatome
+
 ## Installation
 
 If you are going to use a gpu the do this first before continuing 
@@ -18,7 +27,7 @@ pip install my-anatome
 
 ## Manual installation [for Development]
 
-To use cide first get the code from this repo (e.g. fork it on github):
+To use code first get the code from this repo (e.g. fork it on github):
 
 ```
 git clone git@github.com:brando90/my-anatome.git
@@ -35,7 +44,7 @@ conda activate my_anatome_env
 Then install code in edibable mode and all it's depedencies with pip in the currently activated conda environment:
 
 ```
-pip install -e ~/my-anatome
+pip install -e ~/my_anatome
 ```
 
 ## Available Tools
@@ -66,7 +75,14 @@ with torch.no_grad():
 hook1.distance(hook2, size=8)
 hook1.clear()
 hook2.clear()
-remove_hook(model)
+remove_hook(model, hook1)
+remove_hook(model, hook2)
+```
+
+or to test do:
+```python
+from anatome.my_utils import my_anatome_test
+my_anatome_test()
 ```
 
 ### Loss Landscape Visualization

@@ -17,12 +17,12 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name='my_anatome',
-    version='0.0.1',
+    version='0.0.3',
     description='Ἀνατομή (Anatome) is a PyTorch library to analyze representation of neural networks',
     long_description=README,
     long_description_content_type="text/markdown",
     url='https://github.com/brando90/my_anatome',
-    author='Ryuichiro Hataya and Brando Miranda',
+    author='Brando Miranda',
     author_email='brandojazz@gmail.com',
     python_requires='>=3.9.0',
     license='MIT',
