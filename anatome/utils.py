@@ -17,6 +17,15 @@ def use_auto_cast() -> None:
     AUTO_CAST = True
 
 
+def _svd(input: torch.Tensor
+         ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    # torch.svd style
+    U, S, Vh = torch.linalg.svd(input, full_matrices=False)
+    V = Vh.transpose(-2, -1)
+    return U, S, V
+
+
+@torch.no_grad()
 def _evaluate(model: nn.Module,
               data: Tuple[Tensor, Tensor],
               criterion: Callable[[Tensor, Tensor], Tensor]

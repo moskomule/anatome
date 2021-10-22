@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .utils import fftfreq, _irfft, _rfft
+from .utils import _irfft, _rfft, _svd, fftfreq
 
 
 def _zero_mean(input: Tensor,
@@ -20,6 +20,14 @@ def _matrix_normalize(input: Tensor,
                ) -> Tensor:
     from torch.linalg import norm 
     return input - input.mean(dim=dim, keepdim=True) / norm(input, 'fro')  
+
+def _check_shape_equal(x: Tensor,
+                       y: Tensor,
+                       dim: int
+                       ):
+    if x.size(dim) != y.size(dim):
+        raise ValueError(f'x.size({dim}) == y.size({dim}) is expected, but got {x.size(dim)=}, {y.size(dim)=} instead.')
+
 
 def cca_by_svd(x: Tensor,
                y: Tensor
@@ -36,10 +44,10 @@ def cca_by_svd(x: Tensor,
     """
 
     # torch.svd(x)[1] is vector
-    u_1, s_1, v_1 = torch.svd(x)
-    u_2, s_2, v_2 = torch.svd(y)
+    u_1, s_1, v_1 = _svd(x)
+    u_2, s_2, v_2 = _svd(y)
     uu = u_1.t() @ u_2
-    u, diag, v = torch.svd(uu)
+    u, diag, v = _svd(uu)
     # v @ s.diag() = v * s.view(-1, 1), but much faster
     a = (v_1 * s_1.reciprocal_().unsqueeze_(0)) @ u
     b = (v_2 * s_2.reciprocal_().unsqueeze_(0)) @ v
@@ -60,12 +68,12 @@ def cca_by_qr(x: Tensor,
 
     """
 
-    q_1, r_1 = torch.qr(x)
-    q_2, r_2 = torch.qr(y)
+    q_1, r_1 = torch.linalg.qr(x)
+    q_2, r_2 = torch.linalg.qr(y)
     qq = q_1.t() @ q_2
-    u, diag, v = torch.svd(qq)
-    a = torch.inverse(r_1) @ u
-    b = torch.inverse(r_2) @ v
+    u, diag, v = _svd(qq)
+    a = r_1.inverse() @ u
+    b = r_2.inverse() @ v
     return a, b, diag
 
 
@@ -84,8 +92,7 @@ def cca(x: Tensor,
 
     """
 
-    if x.size(0) != y.size(0):
-        raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
+    _check_shape_equal(x, y, 0)
 
     if x.size(0) < x.size(1):
         raise ValueError(f'x.size(0) >= x.size(1) is expected, but got {x.size()=}.')
@@ -104,7 +111,7 @@ def cca(x: Tensor,
 def _svd_reduction(input: Tensor,
                    accept_rate: float
                    ) -> Tensor:
-    left, diag, right = torch.svd(input)
+    left, diag, right = _svd(input)
     full = diag.abs().sum()
     ratio = diag.abs().cumsum(dim=0) / full
     num = torch.where(ratio < accept_rate,
@@ -186,8 +193,7 @@ def linear_cka_distance(x: Tensor,
 
     """
 
-    if x.size(0) != y.size(0):
-        raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
+    _check_shape_equal(x, y, 0)
 
     x = _matrix_normalize(x, dim=0)
     y = _matrix_normalize(y, dim=0)
@@ -208,22 +214,48 @@ def linear_cka_distance(x: Tensor,
     return 1 - dot_prod / (norm_x * norm_y)
 
 
-class SimilarityHook(object):
+def orthogonal_procrustes_distance(x: Tensor,
+                                   y: Tensor,
+                                   ) -> Tensor:
+    """ Orthogonal Procrustes distance used in Ding+21
+
+    Args:
+        x: input tensor of Shape DxH
+        y: input tensor of Shape DxW
+
+    Returns:
+
+    """
+    _check_shape_equal(x, y, 0)
+
+    frobenius_norm = partial(torch.linalg.norm, ord="fro")
+    nuclear_norm = partial(torch.linalg.norm, ord="nuc")
+
+    x = _zero_mean(x, dim=0)
+    x /= frobenius_norm(x)
+    y = _zero_mean(y, dim=0)
+    y /= frobenius_norm(y)
+    # frobenius_norm(x) = 1, frobenius_norm(y) = 1
+    # 0.5*d_proc(x, y)
+    return 1 - nuclear_norm(x.t() @ y)
+
+
+class DistanceHook(object):
     """ Hook to compute CCAs and CKA distance between modules in given models ::
 
-        model = resnet18()
-        hook1 = SimilarityHook(model, "layer3.0.conv1")
-        hook2 = SimilarityHook(model, "layer3.0.conv2")
-        model.eval()
-        with torch.no_grad():
-            for _ in range(10):
-                model(torch.randn(120, 3, 224, 224))
-        hook1.distance(hook2, size=8)
+        >>> model = resnet18()
+        >>> hook1 = DistanceHook(model, "layer3.0.conv1")
+        >>> hook2 = DistanceHook(model, "layer3.0.conv2")
+        >>> model.eval()
+        >>> with torch.no_grad():
+        >>>     for _ in range(10):
+        >>>         model(torch.randn(120, 3, 224, 224))
+        >>> hook1.distance(hook2, size=8)
 
     Args:
         model: Model
         name: Name of module appeared in `model.named_modules()`
-        cca_distance: the method to compute CCA and CKA distance. By default, PWCCA is used.
+        distance_func: the method to compute CCA and CKA distance. By default, PWCCA is used.
         'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
         force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
     """
@@ -231,12 +263,13 @@ class SimilarityHook(object):
     _supported_dim = (2, 4)
     _default_backends = {'pwcca': partial(pwcca_distance, backend='svd'),
                          'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
-                         'lincka': partial(linear_cka_distance, reduce_bias=False)}
+                         'lincka': partial(linear_cka_distance, reduce_bias=False),
+                         "opd": orthogonal_procrustes_distance}
 
     def __init__(self,
                  model: nn.Module,
                  name: str,
-                 cca_distance: Optional[str or Callable] = None,
+                 distance_func: Optional[str or Callable] = None,
                  force_cpu: bool = False,
                  ) -> None:
 
@@ -246,9 +279,10 @@ class SimilarityHook(object):
 
         self.model = model
         self.module = {k: v for k, v in self.model.named_modules()}[name]
-        if cca_distance is None or isinstance(cca_distance, str):
-            cca_distance = self._default_backends[cca_distance or 'pwcca']
-        self.cca_function = cca_distance
+        if distance_func is None or isinstance(distance_func, str):
+            distance_func = self._default_backends[distance_func or 'pwcca']
+        self.cca_function = distance_func
+        self.name = name
         self.force_cpu = force_cpu
         if self.force_cpu:
             # fully utilize CPUs available
@@ -274,7 +308,7 @@ class SimilarityHook(object):
             if self._hooked_tensors is None:
                 self._hooked_tensors = output
             else:
-                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0)
+                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0).contiguous()
 
         self.module.register_forward_hook(hook)
 
@@ -295,23 +329,22 @@ class SimilarityHook(object):
     @staticmethod
     def create_hooks(model: nn.Module,
                      names: List[str],
-                     cca_distance: Optional[str or Callable] = None,
+                     distance_func: Optional[str or Callable] = None,
                      force_cpu: bool = False,
-                     ) -> List[SimilarityHook]:
+                     ) -> List[DistanceHook]:
         """ Create list of hooks from names. ::
 
-        hooks1 = SimilarityHooks(model1, ['name1', ...])
-        hooks2 = SimilarityHooks(model2, ['name1', ...])
-        with torch.no_grad():
-            model1(input)
-            model2(input)
-        [[hook1.distance(hook2) for hook2 in hooks2]
-                                for hook1 in hooks1]
+        >>> hooks1 = DistanceHook.create_hooks(model1, ['name1', ...])
+        >>> hooks2 = DistanceHook.create_hooks(model2, ['name1', ...])
+        >>> with torch.no_grad():
+        >>>    model1(input)
+        >>>    model2(input)
+        >>> [[hook1.distance(hook2) for hook2 in hooks2] for hook1 in hooks1]
 
         Args:
             model: Model
             names: List of names of module appeared in `model.named_modules()`
-            cca_distance: the method to compute CCA and CKA distance. By default, PWCCA is used.
+            distance_func: the method to compute CCA and CKA distance. By default, PWCCA is used.
             'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
             force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
 
@@ -319,10 +352,10 @@ class SimilarityHook(object):
 
         """
 
-        return [SimilarityHook(model, name, cca_distance, force_cpu) for name in names]
+        return [DistanceHook(model, name, distance_func, force_cpu) for name in names]
 
     def distance(self,
-                 other: SimilarityHook,
+                 other: DistanceHook,
                  *,
                  downsample_method: Optional[str] = 'avg_pool',
                  size: Optional[int] = None,
@@ -353,7 +386,10 @@ class SimilarityHook(object):
         if self_tensor.dim() == 2:
             return self.cca_function(self_tensor, other_tensor).item()
         else:
-            if size is not None:
+            if size is None:
+                self_tensor = self_tensor.flatten(2).contiguous()
+                other_tensor = other_tensor.flatten(2).contiguous()
+            else:
                 downsample_method = downsample_method or 'avg_pool'
                 self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
                 other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
@@ -375,6 +411,9 @@ class SimilarityHook(object):
 
         # todo: what if channel-last?
         b, c, h, w = input.size()
+
+        if (size, size) == (h, w):
+            return input.flatten(2).permute(2, 0, 1)
 
         if (size, size) > (h, w):
             raise RuntimeError(f'size is expected to be smaller than h or w, but got {h=}, {w=}.')
@@ -398,5 +437,10 @@ class SimilarityHook(object):
             input_fft = input_fft[..., idx, :][..., idx, :, :]
             input = _irfft(input_fft, 2, normalized=True, onesided=False)
 
-        input = input.view(b, c, -1).permute(2, 0, 1)
+        # BxCxHxW -> (HW)xBxC
+        input = input.flatten(2).permute(2, 0, 1)
         return input
+
+
+# for backward compatibility
+SimilarityHook = DistanceHook
