@@ -1,5 +1,7 @@
 from setuptools import find_packages, setup
 
+import pathlib
+
 # The directory containing this file
 # HERE = pathlib.Path(__file__).parent
 HERE = pathlib.Path('~/my_anatome/').expanduser()
@@ -23,10 +25,6 @@ setup(
     author_email='brandojazz@gmail.com',
     python_requires='>=3.9.0',
     license='MIT',
-    install_requires=install_requires,
     packages=find_packages(),
-    install_requires=['torch==1.9.1',
-                      'torchvision>=0.10.1',
-                      'torchaudio>=0.9.1',
-                     ]
+    install_requires=install_requires
 )
