@@ -45,6 +45,8 @@ with torch.no_grad():
     model(torch.randn(128, 3, 224, 224))
 # downsampling to (size, size) may be helpful
 hook1.distance(hook2, size=8)
+hook1.clear()
+hook2.clear()
 ```
 
 ### Loss Landscape Visualization
