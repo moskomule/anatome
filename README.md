@@ -6,18 +6,36 @@ This project is under active development and the codebase is subject to change.
 
 ## Installation
 
-`anatome` requires
+If you are going to use a gpu the do this first before continuing 
+(or check the offical website: https://pytorch.org/get-started/locally/):
+```angular2html
+pip3 install torch==1.9.1+cu111 torchvision==0.10.1+cu111 torchaudio==0.9.1 -f https://download.pytorch.org/whl/torch_stable.html
+```
+Otherwise, just doing the follwoing should work.
+```
+pip install my-anatome
+```
+
+## Manual installation [for Development]
+
+To use cide first get the code from this repo (e.g. fork it on github):
 
 ```
-Python>=3.9.0
-PyTorch>=1.9.0
-torchvision>=0.10.0
+git clone git@github.com:brando90/my-anatome.git
 ```
 
-After the installation of PyTorch, install `anatome` as follows:
+Then install it in development mode in your python env with python >=3.9.
+E.g. create your env with conda:
 
 ```
-pip install -U git+https://github.com/moskomule/anatome
+conda create -n uutils_env python=3.9
+conda activate uutils_env
+```
+
+Then install code in edibable mode and all it's depedencies with pip in the currently activated conda environment:
+
+```
+pip install -e ~/my-anatome
 ```
 
 ## Available Tools
@@ -88,7 +106,16 @@ imshow(map)
 
 ## Citation
 
-If you use this implementation in your research, please cite as:
+If you use this implementation in your research, please conser citing my version of anatome:
+```
+@software{miranda2021myanatome,
+    author={Brando Miranda},
+    title={My Anatome, a PyTorch library to analyze internal representation of neural networks},
+    url={https://github.com/brando90/my_anatome},
+    year={2021}
+}
+```
+and the original version:
 
 ```
 @software{hataya2020anatome,
