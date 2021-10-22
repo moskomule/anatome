@@ -4,7 +4,7 @@ import pathlib
 
 # The directory containing this file
 # HERE = pathlib.Path(__file__).parent
-HERE = pathlib.Path('~/my_anatome/').expanduser()
+HERE = pathlib.Path('~/my-anatome/').expanduser()
 
 # The text of the README file
 README = (HERE / "README.md").read_text()

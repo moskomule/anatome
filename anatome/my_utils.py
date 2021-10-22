@@ -24,7 +24,9 @@ def my_anatome_test():
     with torch.no_grad():
         model(torch.randn(128, 3, 224, 224))
     # downsampling to (size, size) may be helpful
-    hook1.distance(hook2, size=8)
+    dist: float = hook1.distance(hook2, size=8)
+    print(f'Success: {dist=}\a')
+    #
     hook1.clear()
     hook2.clear()
     remove_hook(model, hook1)

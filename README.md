@@ -9,9 +9,10 @@ the original name `import anatome`.
 Test via:
 ```angular2html
 python -c "import anatome.my_utils as my_utils;my_utils.hello()"
+python -c "import anatome.my_utils as my_utils;my_utils.my_anatome_test()"
 ```
 
-credit to original library: https://github.com/moskomule/anatome
+Credit to original library: https://github.com/moskomule/anatome
 
 ## Installation
 

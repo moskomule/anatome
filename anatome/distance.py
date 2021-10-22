@@ -9,7 +9,6 @@ from torch.nn import functional as F
 
 from .utils import _irfft, _rfft, _svd, fftfreq
 
-
 def _zero_mean(input: Tensor,
                dim: int
                ) -> Tensor:
@@ -94,9 +93,9 @@ def cca(x: Tensor,
 
     _check_shape_equal(x, y, 0)
 
+    # todo: tries to enforce # data points is larger than dimension?
     if x.size(0) < x.size(1):
         raise ValueError(f'x.size(0) >= x.size(1) is expected, but got {x.size()=}.')
-
     if y.size(0) < y.size(1):
         raise ValueError(f'y.size(0) >= y.size(1) is expected, but got {y.size()=}.')
 
@@ -383,16 +382,21 @@ class DistanceHook(object):
             raise RuntimeError('Dimensions of hooked tensors need to be same, '
                                f'but got {self_tensor.dim()=} and {other_tensor.dim()=}')
 
-        if self_tensor.dim() == 2:
+        if self_tensor.dim() == 2:  # - output of FCNN so it's a matrix e.g. [N, D]
             return self.cca_function(self_tensor, other_tensor).item()
         else:
+            # - covolution layer [M, C, H, W]
             if size is None:
+                # no downsampling: [M, C, H*W]
+                # flatten(2) -> flatten from 2 to -1 (end)
                 self_tensor = self_tensor.flatten(2).contiguous()
                 other_tensor = other_tensor.flatten(2).contiguous()
             else:
+                # do downsampling
                 downsample_method = downsample_method or 'avg_pool'
                 self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
                 other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
+            # - compute distance = 1.0 - sim
             return torch.stack([self.cca_function(s, o)
                                 for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
                                 ]
@@ -444,3 +448,46 @@ class DistanceHook(object):
 
 # for backward compatibility
 SimilarityHook = DistanceHook
+
+def original_computation_of_distance_from_Ryuichiro_Hataya(self: DistanceHook,
+                                                           self_tensor: Tensor,
+                                                           other_tensor: Tensor) -> float:
+    return torch.stack([self.cca_function(s, o)
+                                for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
+                                ]
+                               ).mean().item()
+
+def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: DistanceHook,
+                                                           self_tensor: Tensor,
+                                                           other_tensor: Tensor) -> float:
+    """
+    Get the distance between two layer matrices by considering each individual data point on it's own.
+    i.e. we consider [M, F, HW] that we have M data points and the matrix of size [F, HW] for each of them.
+
+    ref:
+        - unbind: https://pytorch.org/docs/stable/generated/torch.unbind.html
+        - see original implementation: original_computation_of_distance_from_Ryuichiro_Hataya
+        - original computedation for (sv/pwd)cca: https://github.com/brando90/svcca/blob/master/tutorials/002_CCA_for_Convolutional_Layers.ipynb
+
+    :param self:
+    :param self_tensor:
+    :param other_tensor:
+    :return:
+    """
+    assert(self_tensor.dim() == 3), f'Expects a conv layer tensor so a tensor of 4 dims but got: {self_tensor.size()}'
+    M, F, HW = self_tensor.size()
+    # - remove the first dimension to get a list of all the tensors [M, F, HW] -> list([F, HW]) of M elements
+    self_tensor: tuple[Tensor] = self_tensor.unbind()
+    other_tensor: tuple[Tensor] = other_tensor.unbind()
+    assert(len(self_tensor) == M and len(other_tensor) == M)
+    # - for each of the M data points, compute the distance/similarity
+    dists_for_wrt_entire_data_points: list[float] = []
+    for m in range(M):
+        s, o = self_tensor[m], other_tensor[m]
+        dist: float = self.cca_function(s, o)
+        dists_for_wrt_entire_data_points.append(dist)
+    # - compute dist
+    # return it to [M, F, HW]
+    dists_for_wrt_entire_data_points: Tensor = torch.stack(dists_for_wrt_entire_data_points)
+    dist: float = dists_for_wrt_entire_data_points.mean().item()
+    return dist
