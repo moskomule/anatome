@@ -28,8 +28,8 @@ Then install it in development mode in your python env with python >=3.9.
 E.g. create your env with conda:
 
 ```
-conda create -n uutils_env python=3.9
-conda activate uutils_env
+conda create -n my_anatome_env python=3.9
+conda activate my_anatome_env
 ```
 
 Then install code in edibable mode and all it's depedencies with pip in the currently activated conda environment:
