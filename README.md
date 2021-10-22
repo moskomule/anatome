@@ -44,7 +44,7 @@ conda activate my_anatome_env
 Then install code in edibable mode and all it's depedencies with pip in the currently activated conda environment:
 
 ```
-pip install -e ~/my_anatome
+pip install -e ~/my-anatome
 ```
 
 ## Available Tools
