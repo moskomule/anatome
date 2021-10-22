@@ -36,6 +36,7 @@ methods are implemented.
 import torch
 from torchvision.models import resnet18
 from anatome import DistanceHook
+from anatome.my_utils import remove_hook
 
 model = resnet18()
 hook1 = DistanceHook(model, "layer3.0.conv1")
@@ -47,6 +48,8 @@ with torch.no_grad():
 hook1.distance(hook2, size=8)
 hook1.clear()
 hook2.clear()
+remove_hook(mdl1)
+remove_hook(mdl2)
 ```
 
 ### Loss Landscape Visualization
