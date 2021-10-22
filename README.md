@@ -4,7 +4,7 @@
 
 This project is under active development and the codebase is subject to change.
 
-Note the name of the pypi package is `my-anatome` but the python import is done with
+Note the name of the pypi package is `ultimate-anatome` but the python import is done with
 the original name `import anatome`.
 Test via:
 ```angular2html
@@ -23,7 +23,7 @@ pip3 install torch==1.9.1+cu111 torchvision==0.10.1+cu111 torchaudio==0.9.1 -f h
 ```
 Otherwise, just doing the follwoing should work.
 ```
-pip install my-anatome
+pip install ultimate-anatome
 ```
 
 ## Manual installation [for Development]
@@ -31,21 +31,21 @@ pip install my-anatome
 To use code first get the code from this repo (e.g. fork it on github):
 
 ```
-git clone git@github.com:brando90/my-anatome.git
+git clone git@github.com:brando90/ultimate-anatome.git
 ```
 
 Then install it in development mode in your python env with python >=3.9.
 E.g. create your env with conda:
 
 ```
-conda create -n my_anatome_env python=3.9
-conda activate my_anatome_env
+conda create -n ultimate_anatome_env python=3.9
+conda activate ultimate_anatome_env
 ```
 
 Then install code in edibable mode and all it's depedencies with pip in the currently activated conda environment:
 
 ```
-pip install -e ~/my-anatome
+pip install -e ~/ultimate-anatome
 ```
 
 ## Available Tools
