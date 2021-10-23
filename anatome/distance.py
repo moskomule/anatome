@@ -9,16 +9,19 @@ from torch.nn import functional as F
 
 from .utils import _irfft, _rfft, _svd, fftfreq
 
+
 def _zero_mean(input: Tensor,
                dim: int
                ) -> Tensor:
     return input - input.mean(dim=dim, keepdim=True)
 
+
 def _matrix_normalize(input: Tensor,
-               dim: int
-               ) -> Tensor:
-    from torch.linalg import norm 
-    return input - input.mean(dim=dim, keepdim=True) / norm(input, 'fro')  
+                      dim: int
+                      ) -> Tensor:
+    from torch.linalg import norm
+    return input - input.mean(dim=dim, keepdim=True) / norm(input, 'fro')
+
 
 def _check_shape_equal(x: Tensor,
                        y: Tensor,
@@ -185,7 +188,7 @@ def linear_cka_distance(x: Tensor,
                         reduce_bias: bool
                         ) -> Tensor:
     """ Linear CKA used in Kornblith et al. 19
-    
+
     Args:
         x: input tensor of Shape DxH
         y: input tensor of Shape DxW
@@ -452,17 +455,19 @@ class DistanceHook(object):
 # for backward compatibility
 SimilarityHook = DistanceHook
 
+
 def original_computation_of_distance_from_Ryuichiro_Hataya(self: DistanceHook,
                                                            self_tensor: Tensor,
                                                            other_tensor: Tensor) -> float:
     return torch.stack([self.cca_function(s, o)
-                                for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
-                                ]
-                               ).mean().item()
+                        for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
+                        ]
+                       ).mean().item()
+
 
 def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: DistanceHook,
-                                                           self_tensor: Tensor,
-                                                           other_tensor: Tensor) -> float:
+                                                                   self_tensor: Tensor,
+                                                                   other_tensor: Tensor) -> float:
     """
     Get the distance between two layer matrices by considering each individual data point on it's own.
     i.e. we consider [M, F, HW] that we have M data points and the matrix of size [F, HW] for each of them.
@@ -477,12 +482,12 @@ def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: Distanc
     :param other_tensor:
     :return:
     """
-    assert(self_tensor.dim() == 3), f'Expects a conv layer tensor so a tensor of 4 dims but got: {self_tensor.size()}'
+    assert (self_tensor.dim() == 3), f'Expects a conv layer tensor so a tensor of 4 dims but got: {self_tensor.size()}'
     M, F, HW = self_tensor.size()
     # - remove the first dimension to get a list of all the tensors [M, F, HW] -> list([F, HW]) of M elements
     self_tensor: tuple[Tensor] = self_tensor.unbind()
     other_tensor: tuple[Tensor] = other_tensor.unbind()
-    assert(len(self_tensor) == M and len(other_tensor) == M)
+    assert (len(self_tensor) == M and len(other_tensor) == M)
     # - for each of the M data points, compute the distance/similarity
     dists_for_wrt_entire_data_points: list[float] = []
     for m in range(M):
