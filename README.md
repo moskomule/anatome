@@ -125,7 +125,7 @@ imshow(map)
 
 If you use this implementation in your research, please conser citing my version of anatome:
 ```
-@software{miranda2021myanatome,
+@software{miranda2021ultimate_anatome,
     author={Brando Miranda},
     title={My Anatome, a PyTorch library to analyze internal representation of neural networks},
     url={https://github.com/brando90/my_anatome},
