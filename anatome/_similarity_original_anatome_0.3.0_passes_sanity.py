@@ -21,13 +21,10 @@ def cca_by_svd(x: Tensor,
                ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using only SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
-
     Args:
         x: input tensor of Shape DxH
         y: input tensor of shape DxW
-
     Returns: x-side coefficients, y-side coefficients, diagonal
-
     """
 
     # torch.svd(x)[1] is vector
@@ -46,13 +43,10 @@ def cca_by_qr(x: Tensor,
               ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using QR and SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
-
     Args:
         x: input tensor of Shape DxH
         y: input tensor of shape DxW
-
     Returns: x-side coefficients, y-side coefficients, diagonal
-
     """
 
     q_1, r_1 = torch.qr(x)
@@ -69,14 +63,11 @@ def cca(x: Tensor,
         backend: str
         ) -> Tuple[Tensor, Tensor, Tensor]:
     """ Compute CCA, Canonical Correlation Analysis
-
     Args:
         x: input tensor of Shape DxH
         y: input tensor of Shape DxW
         backend: svd or qr
-
     Returns: x-side coefficients, y-side coefficients, diagonal
-
     """
 
     if x.size(0) != y.size(0):
@@ -115,15 +106,12 @@ def svcca_distance(x: Tensor,
                    backend: str
                    ) -> Tensor:
     """ Singular Vector CCA proposed in Raghu et al. 2017.
-
     Args:
         x: input tensor of Shape DxH, where D>H
         y: input tensor of Shape DxW, where D>H
         accept_rate: 0.99
         backend: svd or qr
-
     Returns:
-
     """
 
     x = _svd_reduction(x, accept_rate)
@@ -138,14 +126,11 @@ def pwcca_distance(x: Tensor,
                    backend: str
                    ) -> Tensor:
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
-
     Args:
         x: input tensor of Shape DxH, where D>H
         y: input tensor of Shape DxW, where D>H
         backend: svd or qr
-
     Returns:
-
     """
 
     a, b, diag = cca(x, y, backend)
@@ -171,14 +156,12 @@ def linear_cka_distance(x: Tensor,
                         reduce_bias: bool
                         ) -> Tensor:
     """ Linear CKA used in Kornblith et al. 19
-    
+
     Args:
         x: input tensor of Shape DxH
         y: input tensor of Shape DxW
         reduce_bias: debias CKA estimator, which might be helpful when D is limited
-
     Returns:
-
     """
 
     if x.size(0) != y.size(0):
@@ -205,7 +188,6 @@ def linear_cka_distance(x: Tensor,
 
 class SimilarityHook(object):
     """ Hook to compute CCAs and CKA distance between modules in given models ::
-
         model = resnet18()
         hook1 = SimilarityHook(model, "layer3.0.conv1")
         hook2 = SimilarityHook(model, "layer3.0.conv2")
@@ -214,7 +196,6 @@ class SimilarityHook(object):
             for _ in range(10):
                 model(torch.randn(120, 3, 224, 224))
         hook1.distance(hook2, size=8)
-
     Args:
         model: Model
         name: Name of module appeared in `model.named_modules()`
@@ -295,23 +276,19 @@ class SimilarityHook(object):
                      force_cpu: bool = False,
                      ) -> List[SimilarityHook]:
         """ Create list of hooks from names. ::
-
         >>> hooks1 = SimilarityHook.create_hooks(model1, ['name1', ...])
         >>> hooks2 = SimilarityHook.create_hooks(model2, ['name1', ...])
         >>> with torch.no_grad():
         >>>    model1(input)
         >>>    model2(input)
         >>> [[hook1.distance(hook2) for hook2 in hooks2] for hook1 in hooks1]
-
         Args:
             model: Model
             names: List of names of module appeared in `model.named_modules()`
             cca_distance: the method to compute CCA and CKA distance. By default, PWCCA is used.
             'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
             force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
-
         Returns: List of hooks
-
         """
 
         return [SimilarityHook(model, name, cca_distance, force_cpu) for name in names]
@@ -323,14 +300,11 @@ class SimilarityHook(object):
                  size: Optional[int] = None,
                  ) -> float:
         """ Compute CCA distance between self and other.
-
         Args:
             other: Another hook
             downsample_method: method for downsampling. avg_pool or dft.
             size: size of the feature map after downsampling
-
         Returns:
-
         """
 
         self_tensor = self.hooked_tensors
@@ -402,50 +376,3 @@ class SimilarityHook(object):
         # BxCxHxW -> (HW)xBxC
         input = input.flatten(2).permute(2, 0, 1)
         return input
-
-
-# for backward compatibility
-# SimilarityHook = DistanceHook
-
-def original_computation_of_distance_from_Ryuichiro_Hataya(self: DistanceHook,
-                                                           self_tensor: Tensor,
-                                                           other_tensor: Tensor) -> float:
-    return torch.stack([self.cca_function(s, o)
-                        for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
-                        ]
-                       ).mean().item()
-
-def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: DistanceHook,
-                                                                   self_tensor: Tensor,
-                                                                   other_tensor: Tensor) -> float:
-    """
-    Get the distance between two layer matrices by considering each individual data point on it's own.
-    i.e. we consider [M, F, HW] that we have M data points and the matrix of size [F, HW] for each of them.
-
-    ref:
-        - unbind: https://pytorch.org/docs/stable/generated/torch.unbind.html
-        - see original implementation: original_computation_of_distance_from_Ryuichiro_Hataya
-        - original computedation for (sv/pwd)cca: https://github.com/brando90/svcca/blob/master/tutorials/002_CCA_for_Convolutional_Layers.ipynb
-
-    :param self:
-    :param self_tensor:
-    :param other_tensor:
-    :return:
-    """
-    assert (self_tensor.dim() == 3), f'Expects a conv layer tensor so a tensor of 4 dims but got: {self_tensor.size()}'
-    M, F, HW = self_tensor.size()
-    # - remove the first dimension to get a list of all the tensors [M, F, HW] -> list([F, HW]) of M elements
-    self_tensor: tuple[Tensor] = self_tensor.unbind()
-    other_tensor: tuple[Tensor] = other_tensor.unbind()
-    assert (len(self_tensor) == M and len(other_tensor) == M)
-    # - for each of the M data points, compute the distance/similarity
-    dists_for_wrt_entire_data_points: list[float] = []
-    for m in range(M):
-        s, o = self_tensor[m], other_tensor[m]
-        dist: float = self.cca_function(s, o)
-        dists_for_wrt_entire_data_points.append(dist)
-    # - compute dist
-    # return it to [M, F, HW]
-    dists_for_wrt_entire_data_points: Tensor = torch.stack(dists_for_wrt_entire_data_points)
-    dist: float = dists_for_wrt_entire_data_points.mean().item()
-    return dist
