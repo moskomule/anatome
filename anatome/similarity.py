@@ -9,12 +9,33 @@ from torch.nn import functional as F
 
 from .utils import _irfft, _rfft, _svd, fftfreq
 
+def _check_shape_equal(x: Tensor,
+                       y: Tensor,
+                       dim: int
+                       ):
+    if x.size(dim) != y.size(dim):
+        raise ValueError(f'x.size({dim}) == y.size({dim}) is expected, but got {x.size(dim)=}, {y.size(dim)=} instead.')
 
 def _zero_mean(input: Tensor,
                dim: int
                ) -> Tensor:
     return input - input.mean(dim=dim, keepdim=True)
 
+def _matrix_normalize(input: Tensor,
+                      dim: int
+                      ) -> Tensor:
+    """
+    Center and normalize according to the forbenius norm (not the standard deviation).
+
+    Warning: this does not create standardized random variables in a random vectors.
+
+    Note: careful with this, it makes CCA behave in unexpected ways
+    :param input:
+    :param dim:
+    :return:
+    """
+    from torch.linalg import norm
+    return (input - input.mean(dim=dim, keepdim=True)) / norm(input, 'fro')
 
 def cca_by_svd(x: Tensor,
                y: Tensor
@@ -55,8 +76,12 @@ def cca_by_qr(x: Tensor,
 
     """
 
-    q_1, r_1 = torch.qr(x)
-    q_2, r_2 = torch.qr(y)
+    # q_1, r_1 = torch.qr(x)
+    # q_2, r_2 = torch.qr(y)
+    # - bottom code is likely fine since sanity check breaking was caused by matrix_normalize for cca and not the use
+    # - of an updated pytorch library for svd computation, so bellow is likely good too.
+    q_1, r_1 = torch.linalg.qr(x)
+    q_2, r_2 = torch.linalg.qr(y)
     qq = q_1.t() @ q_2
     u, diag, v = _svd(qq)
     a = r_1.inverse() @ u
@@ -78,6 +103,7 @@ def cca(x: Tensor,
     Returns: x-side coefficients, y-side coefficients, diagonal
 
     """
+    # _check_shape_equal(x, y, 0)
 
     if x.size(0) != y.size(0):
         raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
@@ -91,8 +117,11 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
+    # x = _zero_mean(x, dim=0)
+    # y = _zero_mean(y, dim=0)
+    # - careful with bellow, todo: figure out if it's good, but for now if it breaks my sanity checks I won't use it.
+    x = _matrix_normalize(x, dim=0)
+    y = _matrix_normalize(y, dim=0)
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
 
 
@@ -180,12 +209,17 @@ def linear_cka_distance(x: Tensor,
     Returns:
 
     """
+    # _check_shape_equal(x, y, 0)
+    #
+    x = _matrix_normalize(x, dim=0)
+    y = _matrix_normalize(y, dim=0)
 
     if x.size(0) != y.size(0):
         raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
 
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
+    # x = _zero_mean(x, dim=0)
+    # y = _zero_mean(y, dim=0)
+
     dot_prod = (y.t() @ x).norm('fro').pow(2)
     norm_x = (x.t() @ x).norm('fro')
     norm_y = (y.t() @ y).norm('fro')
@@ -202,6 +236,38 @@ def linear_cka_distance(x: Tensor,
         norm_y = _debiased_dot_product_similarity(norm_y.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
     return 1 - dot_prod / (norm_x * norm_y)
 
+def orthogonal_procrustes_distance(x: Tensor,
+                                   y: Tensor,
+                                   ) -> Tensor:
+    """ Orthogonal Procrustes distance used in Ding+21.
+    Returns in dist interval [0, 1].
+
+    Note:
+        -  for a raw representation A we first subtract the mean value from each column, then divide
+    by the Frobenius norm, to produce the normalized representation A* , used in all our dissimilarity computation.
+        - see uutils.torch_uu.orthogonal_procrustes_distance to see my implementation
+    Args:
+        x: input tensor of Shape DxH
+        y: input tensor of Shape DxW
+    Returns:
+    """
+    # import uutils.torch_uu as torch_uu
+    # return torch_uu.orthogonal_procrustes_distance(x, y, normalize_for_range_0_to_1=True)
+    # _check_shape_equal(x, y, 0)
+
+    # frobenius_norm = partial(torch.linalg.norm, ord="fro")
+    nuclear_norm = partial(torch.linalg.norm, ord="nuc")
+
+    x = _matrix_normalize(x, dim=0)
+    y = _matrix_normalize(y, dim=0)
+    # x = _zero_mean(x, dim=0)
+    # x /= frobenius_norm(x)
+    # y = _zero_mean(y, dim=0)
+    # y /= frobenius_norm(y)
+    # frobenius_norm(x) = 1, frobenius_norm(y) = 1
+    # 0.5*d_proc(x, y)
+    # - note this already outputs it between [0, 1] e.g. it's not 2 - 2 nuclear_norm(<x1, x2>)
+    return 1 - nuclear_norm(x.t() @ y)
 
 class SimilarityHook(object):
     """ Hook to compute CCAs and CKA distance between modules in given models ::
@@ -226,7 +292,8 @@ class SimilarityHook(object):
     _supported_dim = (2, 4)
     _default_backends = {'pwcca': partial(pwcca_distance, backend='svd'),
                          'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
-                         'lincka': partial(linear_cka_distance, reduce_bias=False)}
+                         'lincka': partial(linear_cka_distance, reduce_bias=False),
+                         "opd": orthogonal_procrustes_distance}
 
     def __init__(self,
                  model: nn.Module,
@@ -345,16 +412,21 @@ class SimilarityHook(object):
             raise RuntimeError('Dimensions of hooked tensors need to be same, '
                                f'but got {self_tensor.dim()=} and {other_tensor.dim()=}')
 
-        if self_tensor.dim() == 2:
+        if self_tensor.dim() == 2:   # - output of FCNN so it's a matrix e.g. [N, D]
             return self.cca_function(self_tensor, other_tensor).item()
         else:
+            # - covolution layer [M, C, H, W]
             if size is None:
+                # no downsampling: [M, C, H*W]
+                # flatten(2) -> flatten from 2 to -1 (end)
                 self_tensor = self_tensor.flatten(2).contiguous()
                 other_tensor = other_tensor.flatten(2).contiguous()
             else:
+                # do downsampling
                 downsample_method = downsample_method or 'avg_pool'
                 self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
                 other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
+            # - compute distance = 1.0 - sim
             return torch.stack([self.cca_function(s, o)
                                 for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
                                 ]
@@ -404,8 +476,10 @@ class SimilarityHook(object):
         return input
 
 
-# for backward compatibility
+# - for backward compatibility
 # SimilarityHook = DistanceHook
+# - comment this out once the forward merge has been done
+DistanceHook = SimilarityHook
 
 def original_computation_of_distance_from_Ryuichiro_Hataya(self: DistanceHook,
                                                            self_tensor: Tensor,
