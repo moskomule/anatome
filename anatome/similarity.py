@@ -34,8 +34,20 @@ def _matrix_normalize(input: Tensor,
     :param dim:
     :return:
     """
+    return _matrix_normalize_using_centered_data(input, dim)
+
+def _matrix_normalize_using_centered_data(X: Tensor, dim: int = 1) -> Tensor:
+    """
+    Normalize matrix of size wrt to the data dimension according to the similarity preprocessing standard.
+    Assumption is that X is of size [n, d].
+    Otherwise, specify which simension to normalize with dim.
+
+    ref: https://stats.stackexchange.com/questions/544812/how-should-one-normalize-activations-of-batches-before-passing-them-through-a-si
+    """
     from torch.linalg import norm
-    return (input - input.mean(dim=dim, keepdim=True)) / norm(input, 'fro')
+    X_centered: Tensor = _zero_mean(X, dim=dim)
+    X_star: Tensor = X_centered / norm(X_centered, "fro")
+    return X_star
 
 def cca_by_svd(x: Tensor,
                y: Tensor
@@ -75,11 +87,6 @@ def cca_by_qr(x: Tensor,
     Returns: x-side coefficients, y-side coefficients, diagonal
 
     """
-
-    # q_1, r_1 = torch.qr(x)
-    # q_2, r_2 = torch.qr(y)
-    # - bottom code is likely fine since sanity check breaking was caused by matrix_normalize for cca and not the use
-    # - of an updated pytorch library for svd computation, so bellow is likely good too.
     q_1, r_1 = torch.linalg.qr(x)
     q_2, r_2 = torch.linalg.qr(y)
     qq = q_1.t() @ q_2
@@ -117,9 +124,6 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    # x = _zero_mean(x, dim=0)
-    # y = _zero_mean(y, dim=0)
-    # - careful with bellow, todo: figure out if it's good, but for now if it breaks my sanity checks I won't use it.
     x = _matrix_normalize(x, dim=0)
     y = _matrix_normalize(y, dim=0)
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
@@ -210,15 +214,11 @@ def linear_cka_distance(x: Tensor,
 
     """
     # _check_shape_equal(x, y, 0)
-    #
     x = _matrix_normalize(x, dim=0)
     y = _matrix_normalize(y, dim=0)
 
     if x.size(0) != y.size(0):
         raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
-
-    # x = _zero_mean(x, dim=0)
-    # y = _zero_mean(y, dim=0)
 
     dot_prod = (y.t() @ x).norm('fro').pow(2)
     norm_x = (x.t() @ x).norm('fro')
@@ -251,19 +251,11 @@ def orthogonal_procrustes_distance(x: Tensor,
         y: input tensor of Shape DxW
     Returns:
     """
-    # import uutils.torch_uu as torch_uu
-    # return torch_uu.orthogonal_procrustes_distance(x, y, normalize_for_range_0_to_1=True)
     # _check_shape_equal(x, y, 0)
-
-    # frobenius_norm = partial(torch.linalg.norm, ord="fro")
     nuclear_norm = partial(torch.linalg.norm, ord="nuc")
 
     x = _matrix_normalize(x, dim=0)
     y = _matrix_normalize(y, dim=0)
-    # x = _zero_mean(x, dim=0)
-    # x /= frobenius_norm(x)
-    # y = _zero_mean(y, dim=0)
-    # y /= frobenius_norm(y)
     # frobenius_norm(x) = 1, frobenius_norm(y) = 1
     # 0.5*d_proc(x, y)
     # - note this already outputs it between [0, 1] e.g. it's not 2 - 2 nuclear_norm(<x1, x2>)
