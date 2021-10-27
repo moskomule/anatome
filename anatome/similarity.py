@@ -124,8 +124,10 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    x = _matrix_normalize(x, dim=0)
-    y = _matrix_normalize(y, dim=0)
+    # x = _matrix_normalize(x, dim=0)
+    # y = _matrix_normalize(y, dim=0)
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
 
 
@@ -214,8 +216,10 @@ def linear_cka_distance(x: Tensor,
 
     """
     # _check_shape_equal(x, y, 0)
-    x = _matrix_normalize(x, dim=0)
-    y = _matrix_normalize(y, dim=0)
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
+    # x = _matrix_normalize(x, dim=0)
+    # y = _matrix_normalize(y, dim=0)
 
     if x.size(0) != y.size(0):
         raise ValueError(f'x.size(0) == y.size(0) is expected, but got {x.size(0)=}, {y.size(0)=} instead.')
@@ -256,9 +260,8 @@ def orthogonal_procrustes_distance(x: Tensor,
 
     x = _matrix_normalize(x, dim=0)
     y = _matrix_normalize(y, dim=0)
-    # frobenius_norm(x) = 1, frobenius_norm(y) = 1
-    # 0.5*d_proc(x, y)
-    # - note this already outputs it between [0, 1] e.g. it's not 2 - 2 nuclear_norm(<x1, x2>)
+    # note: ||x||_F = 1, ||y||_F = 1
+    # - note this already outputs it between [0, 1] e.g. it's not 2 - 2 nuclear_norm(<x1, x2>) due to 0.5*d_proc(x, y)
     return 1 - nuclear_norm(x.t() @ y)
 
 class SimilarityHook(object):
