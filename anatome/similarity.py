@@ -25,27 +25,18 @@ def _matrix_normalize(input: Tensor,
                       dim: int
                       ) -> Tensor:
     """
-    Center and normalize according to the forbenius norm (not the standard deviation).
+    Center and normalize according to the forbenius norm of the centered data.
 
-    Warning: this does not create standardized random variables in a random vectors.
-
-    Note: careful with this, it makes CCA behave in unexpected ways
+    Note:
+        - this does not create standardized random variables in a random vectors.
+    ref:
+        - https://stats.stackexchange.com/questions/544812/how-should-one-normalize-activations-of-batches-before-passing-them-through-a-si
     :param input:
     :param dim:
     :return:
     """
-    return _matrix_normalize_using_centered_data(input, dim)
-
-def _matrix_normalize_using_centered_data(X: Tensor, dim: int = 1) -> Tensor:
-    """
-    Normalize matrix of size wrt to the data dimension according to the similarity preprocessing standard.
-    Assumption is that X is of size [n, d].
-    Otherwise, specify which simension to normalize with dim.
-
-    ref: https://stats.stackexchange.com/questions/544812/how-should-one-normalize-activations-of-batches-before-passing-them-through-a-si
-    """
     from torch.linalg import norm
-    X_centered: Tensor = _zero_mean(X, dim=dim)
+    X_centered: Tensor = _zero_mean(input, dim=dim)
     X_star: Tensor = X_centered / norm(X_centered, "fro")
     return X_star
 
