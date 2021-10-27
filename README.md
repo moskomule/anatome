@@ -127,7 +127,7 @@ If you use this implementation in your research, please conser citing my version
 ```
 @software{miranda2021ultimate_anatome,
     author={Brando Miranda},
-    title={My Anatome, a PyTorch library to analyze internal representation of neural networks},
+    title={Ultimate Anatome, the ultimate PyTorch library to analyze internal representation of neural networks},
     url={https://github.com/brando90/my_anatome},
     year={2021}
 }
