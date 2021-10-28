@@ -424,9 +424,34 @@ class SimilarityHook(object):
         if self_tensor.dim() == 2:   # - output of FCNN so it's a matrix e.g. [N, D]
             return self.cca_function(self_tensor, other_tensor).item()
         else:
+            M, C, H, W = self_tensor.size()
             if effecive_neuron_type == 'filter':
-                # - [M, C, H, W] -> [M*H*W, C] = [N, D]
-                pass
+                # - [M, C, H, W] -> [M*H'*W', C] where H', W' corresponds to spatial size after downsampling (if done)
+                if size is None:
+                    # -- [M, C, H, W] -> [MHW, C] = [N, D]
+                    # - [M, C, H, W] -> [M, H, W, C]
+                    self_tensor = self_tensor.permute(0, 2, 3, 1)
+                    other_tensor = other_tensor.permute(0, 2, 3, 1)
+                    assert(self_tensor.size() == torch.Size([M, H, W, C]))
+                    # - [M, H, W, C] -> [MHW, C]
+                    self_tensor = self_tensor.flatten(start_dim=0, end_dim=2)
+                    other_tensor = other_tensor.flatten(start_dim=0, end_dim=2)
+                    assert(self_tensor.size() == torch.Size([M*H*W, C]))
+                    dist: float = self.cca_function(self_tensor, other_tensor).item()
+                    return dist
+                else:
+                    # -- [M, C, H, W] -> [M*H*W, C] = [N, D]
+                    # [M, C, H, W] -> [size^2, B, C]
+                    downsample_method = downsample_method or 'avg_pool'
+                    self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
+                    other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
+                    assert(self_tensor.size() == torch.Size([size**2, M, C]))
+                    # [size ^ 2, B, C] -> [size^2*B, C]
+                    self_tensor = self_tensor.flatten(start_dim=0, end_dim=1)
+                    other_tensor = other_tensor.flatten(start_dim=0, end_dim=1)
+                    assert(self_tensor.size() == torch.Size([M*size**2, C]))
+                    dist: float = self.cca_function(self_tensor, other_tensor).item()
+                    return dist
             elif effecive_neuron_type == 'activation':
                 # - [M, C, H, W] -> [M, C*H*W] = [N, D]
                 assert False, 'Not tested'
@@ -446,7 +471,9 @@ class SimilarityHook(object):
                        backend: str
                        ) -> Tensor:
         """
-        Downsample 4D tensor of BxCxHxD [B, C, H, D] to 3D tensor of {size^2}xBxC [size^2, B, C]
+        Downsample 4D tensor of [B, C, H, W] ([B, C, H, W] -> [HW, B, C])
+        to 3D tensor of [size^2, B, C] ([B, C, H, W] -> [HW, B, C]).
+            does: [B, C, H, W] -> [size^2, B, C]
         """
 
         if input.dim() != 4:
@@ -465,7 +492,7 @@ class SimilarityHook(object):
             raise RuntimeError(f'backend is expected to be avg_pool or dft, but got {backend=}.')
 
         if backend == 'avg_pool':
-            input = F.adaptive_avg_pool2d(input, (size, size))
+            input = F.adaptive_avg_pool2d(input=input, output_size=(size, size))
 
         else:
             # almost PyTorch implant of
@@ -481,7 +508,8 @@ class SimilarityHook(object):
             input = _irfft(input_fft, 2, normalized=True, onesided=False)
 
         # BxCxHxW -> (HW)xBxC
-        input = input.flatten(2).permute(2, 0, 1)
+        # [B, C, H, W] -> [HW, B, C]
+        input = input.flatten(start_dim=2, end_dim=-1).permute(2, 0, 1)
         return input
 
 
