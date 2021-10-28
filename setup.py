@@ -17,7 +17,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name='ultimate-anatome',
-    version='0.0.6',
+    version='0.0.7',
     description='Ἀνατομή (Anatome) is a PyTorch library to analyze representation of neural networks',
     long_description=README,
     long_description_content_type="text/markdown",
