@@ -392,7 +392,7 @@ class SimilarityHook(object):
                  *,
                  downsample_method: Optional[str] = 'avg_pool',
                  size: Optional[int] = None,
-                 effecive_neuron_type: str = 'filter'
+                 effective_neuron_type: str = 'filter'
                  ) -> float:
         """ Compute CCA distance between self and other.
 
@@ -400,7 +400,7 @@ class SimilarityHook(object):
             other: Another hook
             downsample_method: method for downsampling. avg_pool or dft.
             size: size of the feature map after downsampling
-            effecive_neuron_type: how to define a nueron. Default filter means each filter is a neuron so each patch of
+            effective_neuron_type: how to define a nueron. Default filter means each filter is a neuron so each patch of
                 data is a data point. Yields [M, C, H, W] -> [MHW -> C].
                 Each neuron vector will have size [MHW, 1] for each filter/neuron.
                 Other option activation means a neuron is one of the CHW activations. Yields [M, C, H, W] -> [M, CHW]
@@ -425,7 +425,7 @@ class SimilarityHook(object):
             return self.cca_function(self_tensor, other_tensor).item()
         else:
             M, C, H, W = self_tensor.size()
-            if effecive_neuron_type == 'filter':
+            if effective_neuron_type == 'filter':
                 # - [M, C, H, W] -> [M*H'*W', C] where H', W' corresponds to spatial size after downsampling (if done)
                 if size is None:
                     # -- [M, C, H, W] -> [MHW, C] = [N, D]
@@ -452,18 +452,18 @@ class SimilarityHook(object):
                     assert(self_tensor.size() == torch.Size([M*size**2, C]))
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
-            elif effecive_neuron_type == 'activation':
+            elif effective_neuron_type == 'activation':
                 # - [M, C, H, W] -> [M, C*H*W] = [N, D]
                 assert False, 'Not tested'
                 # improvement: [M, C, H, W] -> [M, C*H*W]
                 self_tensor = self_tensor.flatten(start_dim=3, end_dim=-1).contiguous()
                 other_tensor = other_tensor.flatten(start_dim=3, end_dim=-1).contiguous()
                 return self.cca_function(self_tensor, other_tensor).item()
-            elif effecive_neuron_type == 'original_anatome':
+            elif effective_neuron_type == 'original_anatome':
                 dist: float = distance_cnn_original_anatome(self, size, downsample_method, self_tensor, other_tensor)
                 return dist
             else:
-                raise ValueError(f'Invalid effecive_neuron_type: {effecive_neuron_type=}')
+                raise ValueError(f'Invalid effective_neuron_type: {effective_neuron_type=}')
 
     @staticmethod
     def _downsample_4d(input: Tensor,
