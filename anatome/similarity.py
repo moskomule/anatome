@@ -426,6 +426,7 @@ class SimilarityHook(object):
         else:
             M, C, H, W = self_tensor.size()
             if effective_neuron_type == 'filter':
+                print(f'{effective_neuron_type=}')
                 # - [M, C, H, W] -> [M*H'*W', C] where H', W' corresponds to spatial size after downsampling (if done)
                 if size is None:
                     # -- [M, C, H, W] -> [MHW, C] = [N, D]
@@ -453,13 +454,35 @@ class SimilarityHook(object):
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
             elif effective_neuron_type == 'activation':
-                # - [M, C, H, W] -> [M, C*H*W] = [N, D]
-                assert False, 'Not tested'
-                # improvement: [M, C, H, W] -> [M, C*H*W]
-                self_tensor = self_tensor.flatten(start_dim=3, end_dim=-1).contiguous()
-                other_tensor = other_tensor.flatten(start_dim=3, end_dim=-1).contiguous()
-                return self.cca_function(self_tensor, other_tensor).item()
+                print(f'{effective_neuron_type=}')
+                # - [M, C, H, W] -> [M, C*H'*W'] = [N, D]
+                if size is None:
+                    # -- [M, C, H, W] -> [M, CHW] = [N, D]
+                    # - [M, C, H, W] -> [M, CHW]
+                    self_tensor = self_tensor.flatten(start_dim=1, end_dim=-1)
+                    other_tensor = other_tensor.flatten(start_dim=1, end_dim=-1)
+                    assert(self_tensor.size() == torch.Size([M, C*H*W]))
+                    dist: float = self.cca_function(self_tensor, other_tensor).item()
+                    return dist
+                else:
+                    # -- [M, C, H, W] -> [M, C*H'*W'] = [N, D]
+                    # [M, C, H, W] -> [size^2, B, C]
+                    downsample_method = downsample_method or 'avg_pool'
+                    self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
+                    other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
+                    assert(self_tensor.size() == torch.Size([size**2, M, C]))
+                    # [size^2, B, C] -> [B, size^2, C]
+                    self_tensor = self_tensor.permute(1, 0, 2)
+                    other_tensor = other_tensor.permute(1, 0, 2)
+                    assert(self_tensor.size() == torch.Size([M, size**2, C]))
+                    # [B, size^2, C] -> [B, size^2 * C]
+                    self_tensor = self_tensor.flatten(start_dim=1, end_dim=-1)
+                    other_tensor = other_tensor.flatten(start_dim=1, end_dim=-1)
+                    assert(self_tensor.size() == torch.Size([M, (size**2)*C]))
+                    dist: float = self.cca_function(self_tensor, other_tensor).item()
+                    return dist
             elif effective_neuron_type == 'original_anatome':
+                print(f'{effective_neuron_type=}')
                 dist: float = distance_cnn_original_anatome(self, size, downsample_method, self_tensor, other_tensor)
                 return dist
             else:
