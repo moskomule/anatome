@@ -30,16 +30,19 @@ methods are implemented.
 - [Raghu et al. NIPS2017 SVCCA](https://papers.nips.cc/paper/7188-svcca-singular-vector-canonical-correlation-analysis-for-deep-learning-dynamics-and-interpretability)
 - [Marcos et al. NeurIPS2018 PWCCA](https://papers.nips.cc/paper/7815-insights-on-representational-similarity-in-neural-networks-with-canonical-correlation)
 - [Kornblith et al. ICML2019 Linear CKA](http://proceedings.mlr.press/v97/kornblith19a.html)
+- [Ding et al. arXiv Orthogonal Procrustes distance](https://arxiv.org/abs/2108.01661)
 
 ```python
-from anatome import SimilarityHook
+import torch
+from torchvision.models import resnet18
+from anatome import DistanceHook
 
 model = resnet18()
-hook1 = SimilarityHook(model, "layer3.0.conv1")
-hook2 = SimilarityHook(model, "layer3.0.conv2")
+hook1 = DistanceHook(model, "layer3.0.conv1")
+hook2 = DistanceHook(model, "layer3.0.conv2")
 model.eval()
 with torch.no_grad():
-    model(data[0])
+    model(torch.randn(128, 3, 224, 224))
 # downsampling to (size, size) may be helpful
 hook1.distance(hook2, size=8)
 ```
