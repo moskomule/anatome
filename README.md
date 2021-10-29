@@ -12,7 +12,7 @@ python -c "import anatome.my_utils as my_utils;my_utils.hello()"
 python -c "import anatome.my_utils as my_utils;my_utils.my_anatome_test()"
 ```
 
-Credit to original library: https://github.com/moskomule/anatome
+Credit to original library: https://github.com/moskomule/anatome and consider citing both of us! Citation at the end of readme.
 
 ## Installation
 
