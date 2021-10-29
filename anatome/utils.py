@@ -1,9 +1,11 @@
 from collections import OrderedDict
 from importlib.metadata import version
+from pprint import pprint
 from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
+
 
 AUTO_CAST = False
 HAS_FFT_MODULE = (version("torch") >= "1.7.0")
@@ -150,6 +152,29 @@ def _irfft(self: Tensor,
 
 LayerIdentifier = Union[str, tuple[str]]
 
+def _clear_hooks(hooks: list):
+    for hook in hooks:
+        hook.clear()
+
+
+def remove_hook(mdl: nn.Module, hook):
+    """
+    ref: https://github.com/pytorch/pytorch/issues/5037
+    """
+    handle = mdl.register_forward_hook(hook)
+    handle.remove()
+
+
+def remove_hooks(mdl: nn.Module, hooks: list):
+    """
+    ref:
+        - https://github.com/pytorch/pytorch/issues/5037
+        - https://discuss.pytorch.org/t/how-to-remove-multiple-hooks/135442
+    """
+    for hook in hooks:
+        remove_hook(mdl, hook)
+
+
 def _to_layer_order_dict(dists: list[float],
                          layer_names1: list[str],
                          layer_names2: list[str]) -> OrderedDict[LayerIdentifier, float]:
@@ -170,7 +195,7 @@ def _dists_per_layer_to_list(dists_per_layer: OrderedDict[LayerIdentifier, float
     """
     OrderedDict([L, 1]) -> list([L, 1])
     """
-    return [dist for _, dist in dists_per_layer]
+    return [dist for _, dist in dists_per_layer.items()]
 
 def _dists_per_task_per_layer_to_list(dists_per_tasks_per_layer: list[OrderedDict[LayerIdentifier, float]]) -> list[list[float]]:
     """
@@ -217,7 +242,7 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
         mdl2(X2)
     # - compute distances/sims for each layer
     dists_od: OrderedDict[LayerIdentifier, float] = OrderedDict()
-    for layer_idx, layer1, layer2 in enumerate(zip(layer_names1, layer_names2)):
+    for layer_idx, (layer1, layer2) in enumerate(zip(layer_names1, layer_names2)):
         hook1: SimilarityHook = hooks1[layer_idx]
         hook2: SimilarityHook = hooks2[layer_idx]
         # - get dist/sim for current models for current layer
@@ -225,6 +250,8 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                                      effective_neuron_type=effective_neuron_type)
         layer_key: LayerIdentifier = layer1 if layer1 == layer2 else (layer1, layer2)
         dists_od[layer_key] = dist
+    _clear_hooks(hooks1)
+    _clear_hooks(hooks2)
     return dists_od
 
 
@@ -239,7 +266,7 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
                                        iters: int = 1) -> list[OrderedDict[LayerIdentifier, float]]:
     """
     Gets the distance for a batch (e.g meta-batch) of data sets/tasks and for each layer the distances between the nets:
-        [B, M, C, H, W], [L] -> [B, L, 1] as nested iterable (e.g. list of list)
+        [B, M, C, H, W], [L] -> list(OrderDict([B, L, 1]))
     Example use:
         - Computing d(f_ml(X), A(f_ml, t)(X)) so X1=X2=X.
         - Computing dv so some restricted cross product of the data sets in X1 and X2 (X1 != X2),
@@ -249,7 +276,7 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
     """
     assert len(X1.size()) == 5, f'Data set does not 5 dims i.e. [B, M, C, H, W] instead got: {X1.size()=}'
     assert len(X2.size()) == 5, f'Data set does not 5 dims i.e. [B, M, C, H, W] instead got: {X2.size()=}'
-    # - get distances per data sets per layers
+    # - get distances per data sets/tasks per layers: [B, M, C, H, W], [L] -> [B, L, 1]
     B: int = min(X1.size(0), X2.size(0))
     dists_entire_net_all_data_sets: list[OrderedDict[LayerIdentifier, float]] = []  # [B, L, 1]
     for b in range(B):
@@ -269,7 +296,7 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
     # check effective size [B, L, 1]
     L: int = len(layer_names1)
     assert len(dists_entire_net_all_data_sets) == B
-    assert len(dist_for_data_set_b[0]) == L
+    assert len(dists_entire_net_all_data_sets[0]) == L
     # - [B, L, 1], return list of iters of distances per data sets (tasks) per layers
     return dists_entire_net_all_data_sets
 
@@ -285,7 +312,7 @@ def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                              iters: int = 1) -> tuple[OrderedDict[LayerIdentifier, float]]:
     """
     Compute the overall stats (mean & std) of distances per layer
-        [B, M, C, H, W] -> (mu_per_layer, std_per_layer) pair of size [L, 1]
+        [B, M, C, H, W] -> [L, 1]*2 (mus, stds) per layer
     for the given B number of data sets/tasks of size [M, C, H, W].
 
     Note:
@@ -294,6 +321,7 @@ def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
     :return:
     """
     from uutils.torch_uu import tensorify
+    assert len(layer_names1) == len(layer_names2)
     # - [B, L, 1], get distances per data sets (tasks) per layer
     distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = dist_batch_data_sets_for_all_layer(mdl1, mdl2, X1, X2,
                                                                                               layer_names1,
@@ -306,17 +334,23 @@ def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
     _distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(distances_per_data_sets_per_layer)
     _distances_per_data_sets_per_layer: Tensor = tensorify(_distances_per_data_sets_per_layer)
     # - [B, L, 1] -> [L, 1], get the avg distance/sim for each layer (and std)
-    L: int = len(_distances_per_data_sets_per_layer[0])
     means_per_layer: Tensor = _distances_per_data_sets_per_layer.mean(dim=0)
     stds_per_layer: Tensor = _distances_per_data_sets_per_layer.std(dim=0)
-    assert means_per_layer.size() == torch.Size([L, 1])
-    assert stds_per_layer.size() == torch.Size([L, 1])
-    # [L, 1] -> OrderDict([L, 1])
-    mean_distance_per_layer: OrderedDict[LayerIdentifier, float] = []
-    std_distance_per_layer: OrderedDict[LayerIdentifier, float] = []
+    L: int = len(_distances_per_data_sets_per_layer[0])
+    assert means_per_layer.size() == torch.Size([L])
+    assert stds_per_layer.size() == torch.Size([L])
+    # [L, 1] -> OrderDict([L])
+    layer_ids: list[LayerIdentifier] = list(distances_per_data_sets_per_layer[0].keys())
+    assert len(layer_ids) == L == len(layer_names1)
+    mean_distance_per_layer: OrderedDict[LayerIdentifier, float] = OrderedDict()
+    std_distance_per_layer: OrderedDict[LayerIdentifier, float] = OrderedDict()
     for l_idx in range(L):
-
-
+        layer_id: LayerIdentifier = layer_ids[l_idx]
+        mu: float = means_per_layer[l_idx].item()
+        std: float = stds_per_layer[l_idx].item()
+        mean_distance_per_layer[layer_id] = mu
+        std_distance_per_layer[layer_id] = std
+    return mean_distance_per_layer, std_distance_per_layer
 
 
 def stats_distance_entire_net(mdl1: nn.Module, mdl2: nn.Module,
@@ -333,46 +367,80 @@ def stats_distance_entire_net(mdl1: nn.Module, mdl2: nn.Module,
         [B, M, C, H, W] -> pair of [1, 1]
     :return:
     """
-    pass
+    from uutils.torch_uu import tensorify
+    # - [B, L, 1], get distances per data sets (tasks) per layer
+    distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = dist_batch_data_sets_for_all_layer(
+        mdl1, mdl2, X1, X2,
+        layer_names1,
+        layer_names2, dist_type,
+        downsample_method,
+        downsample_size,
+        effective_neuron_type,
+        force_cpu, iters)
+    # list(OrderDict([B, L, 1])) -> list([B, L, 1])
+    _distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
+        distances_per_data_sets_per_layer)
+    _distances_per_data_sets_per_layer: Tensor = tensorify(_distances_per_data_sets_per_layer)
+    # - [B, L, 1] -> [1], get the avg distance/sim for each layer (and std)
+    mu: Tensor = _distances_per_data_sets_per_layer.mean(dim=[0, 1])
+    std: Tensor = _distances_per_data_sets_per_layer.std(dim=[0, 1])
+    return mu, std
+
+def pprint_results(mus: OrderedDict, stds: OrderedDict):
+    print('---- stats of results per layer')
+    print('-- mus (means) per layer')
+    pprint(mus)
+    print('-- stds (standard devs) per layer')
+    pprint(stds)
+    print()
 
 # - tests
 
-# def multiple_hooks_test():
-#     """
-#     """
-#     from collections import OrderedDict
-#     from copy import deepcopy
-#
-#     import torch
-#     import torch.nn as nn
-#
-#     from uutils.torch_uu import cxa_sim, approx_equal
-#     from uutils.torch_uu.models import get_single_conv_model
-#     import anatome
-#     print(f'from import: {anatome=}')
-#
-#     # - very simple sanity check
-#     Cin: int = 3
-#     num_out_filters: int = 8
-#     conv_layer: nn.Module = get_single_conv_model(in_channels=3, num_out_filters=num_out_filters)
-#     mdl1: nn.Module = nn.Sequential(OrderedDict([('conv1', conv_layer)]))
-#     mdl2: nn.Module = deepcopy(mdl1)
-#     layer_name = 'conv1'
-#
-#     # - ends up comparing two matrices of size [B, Dout], on same data, on same model
-#     B: int = 4
-#     C, H, W = Cin, 64, 64
-#     # downsample_size = None
-#     cxa_dist_type = 'svcca'
-#     cxa_dist_type = 'pwcca'
-#     X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, C, H, W))
-#
-#     # - compute sim for NO downsample: so layer matrix is []
-#     downsample_size = None
-#     sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1,
-#                          cxa_dist_type=cxa_dist_type)
-#     print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
-#     assert (approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
-#     # -- multiple hooks
-#
-#     pass
+def dist_per_layer_test():
+    """
+    """
+    from copy import deepcopy
+
+    import torch
+    import torch.nn as nn
+
+    from uutils.torch_uu.models.learner_from_opt_as_few_shot_paper import get_default_learner_from_default_args, \
+        get_feature_extractor_layers
+
+    # - very simple sanity check
+    Cin: int = 3
+    # num_out_filters: int = 8
+    mdl1: nn.Module = get_default_learner_from_default_args()
+    mdl2: nn.Module = deepcopy(mdl1)
+    layer_names = get_feature_extractor_layers()
+    print(f'{layer_names=}')
+
+    # - ends up comparing two matrices of size [B, Dout], on same data, on same model
+    B: int = 2
+    M: int = 5  # e.g. k*n_c
+    C, H, W = Cin, 84, 84
+    downsample_size = None
+    dist_type = 'pwcca'
+    # --
+    X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+    mus, stds = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    pprint_results(mus, stds)
+    assert(mus != stds)
+
+    mu, std = stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    print(f'----entire net result: {mu=}, {std=}')
+
+    # --
+    X1: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+    X2: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+    mus, stds = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    pprint_results(mus, stds)
+    assert(mus != stds)
+
+    mu, std = stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    print(f'----entire net result: {mu=}, {std=}')
+
+
+if __name__ == '__main__':
+    dist_per_layer_test()
+    print('Done, success\a')
