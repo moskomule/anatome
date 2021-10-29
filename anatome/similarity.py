@@ -426,7 +426,7 @@ class SimilarityHook(object):
         else:
             M, C, H, W = self_tensor.size()
             if effective_neuron_type == 'filter':
-                print(f'{effective_neuron_type=}')
+                # print(f'{effective_neuron_type=}')
                 # - [M, C, H, W] -> [M*H'*W', C] where H', W' corresponds to spatial size after downsampling (if done)
                 if size is None:
                     # -- [M, C, H, W] -> [MHW, C] = [N, D]
@@ -454,7 +454,7 @@ class SimilarityHook(object):
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
             elif effective_neuron_type == 'activation':
-                print(f'{effective_neuron_type=}')
+                # print(f'{effective_neuron_type=}')
                 # - [M, C, H, W] -> [M, C*H'*W'] = [N, D]
                 if size is None:
                     # -- [M, C, H, W] -> [M, CHW] = [N, D]
@@ -482,7 +482,7 @@ class SimilarityHook(object):
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
             elif effective_neuron_type == 'original_anatome':
-                print(f'{effective_neuron_type=}')
+                # print(f'{effective_neuron_type=}')
                 dist: float = distance_cnn_original_anatome(self, size, downsample_method, self_tensor, other_tensor)
                 return dist
             else:
