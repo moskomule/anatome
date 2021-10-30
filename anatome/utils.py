@@ -1,3 +1,4 @@
+import time
 from collections import OrderedDict
 from importlib.metadata import version
 from pprint import pprint
@@ -5,7 +6,6 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
-
 
 AUTO_CAST = False
 HAS_FFT_MODULE = (version("torch") >= "1.7.0")
@@ -152,6 +152,7 @@ def _irfft(self: Tensor,
 
 LayerIdentifier = Union[str, tuple[str]]
 
+
 def _clear_hooks(hooks: list):
     for hook in hooks:
         hook.clear()
@@ -191,13 +192,16 @@ def _to_layer_order_dict(dists: list[float],
         dists_od[layer_key] = dist
     return dists_od
 
+
 def _dists_per_layer_to_list(dists_per_layer: OrderedDict[LayerIdentifier, float]) -> list[float]:
     """
     OrderedDict([L, 1]) -> list([L, 1])
     """
     return [dist for _, dist in dists_per_layer.items()]
 
-def _dists_per_task_per_layer_to_list(dists_per_tasks_per_layer: list[OrderedDict[LayerIdentifier, float]]) -> list[list[float]]:
+
+def _dists_per_task_per_layer_to_list(dists_per_tasks_per_layer: list[OrderedDict[LayerIdentifier, float]]) -> list[
+    list[float]]:
     """
     OrderedDict([B, L, 1]) -> list([B, L, 1])
     """
@@ -208,6 +212,7 @@ def _dists_per_task_per_layer_to_list(dists_per_tasks_per_layer: list[OrderedDic
         _dists_per_tasks_per_layer.append(_dists_per_layer)
     return _dists_per_tasks_per_layer
 
+
 def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                             X1: Tensor, X2: Tensor,
                             layer_names1: list[str], layer_names2: list[str],
@@ -216,7 +221,9 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                             downsample_size: Optional[int] = None,
                             effective_neuron_type: str = 'filter',
                             force_cpu: bool = False,
-                            iters: int = 1) -> OrderedDict[LayerIdentifier, float]:
+                            iters: int = 1,
+                            metrics_as_dist: bool = True,
+                            ) -> OrderedDict[LayerIdentifier, float]:
     """
     Given a pair of data sets (or batches, potentially the same one), compute the distance btw the models
         [M, C, H, W], [L] -> [L, 1] (as list like obj)
@@ -249,6 +256,7 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
         dist: float = hook1.distance(hook2, downsample_method=downsample_method, size=downsample_size,
                                      effective_neuron_type=effective_neuron_type)
         layer_key: LayerIdentifier = layer1 if layer1 == layer2 else (layer1, layer2)
+        dist = dist if metrics_as_dist else 1.0 - dist
         dists_od[layer_key] = dist
     _clear_hooks(hooks1)
     _clear_hooks(hooks2)
@@ -263,7 +271,8 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
                                        downsample_size: Optional[int] = None,
                                        effective_neuron_type: str = 'filter',
                                        force_cpu: bool = False,
-                                       iters: int = 1) -> list[OrderedDict[LayerIdentifier, float]]:
+                                       iters: int = 1,
+                                       metrics_as_dist: bool = True) -> list[OrderedDict[LayerIdentifier, float]]:
     """
     Gets the distance for a batch (e.g meta-batch) of data sets/tasks and for each layer the distances between the nets:
         [B, M, C, H, W], [L] -> list(OrderDict([B, L, 1]))
@@ -290,7 +299,9 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
                                                                                            downsample_method,
                                                                                            downsample_size,
                                                                                            effective_neuron_type,
-                                                                                           force_cpu, iters)
+                                                                                           force_cpu, iters,
+                                                                                           metrics_as_dist
+                                                                                           )
         # adding to [B, L, 1]
         dists_entire_net_all_data_sets.append(dist_for_data_set_b)
     # check effective size [B, L, 1]
@@ -309,7 +320,9 @@ def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                              downsample_size: Optional[int] = None,
                              effective_neuron_type: str = 'filter',
                              force_cpu: bool = False,
-                             iters: int = 1) -> tuple[OrderedDict[LayerIdentifier, float]]:
+                             iters: int = 1,
+                             metrics_as_dist: bool = True
+                             ) -> tuple[OrderedDict[LayerIdentifier, float]]:
     """
     Compute the overall stats (mean & std) of distances per layer
         [B, M, C, H, W] -> [L, 1]*2 (mus, stds) per layer
@@ -323,15 +336,19 @@ def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
     from uutils.torch_uu import tensorify
     assert len(layer_names1) == len(layer_names2)
     # - [B, L, 1], get distances per data sets (tasks) per layer
-    distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = dist_batch_data_sets_for_all_layer(mdl1, mdl2, X1, X2,
-                                                                                              layer_names1,
-                                                                                              layer_names2, dist_type,
-                                                                                              downsample_method,
-                                                                                              downsample_size,
-                                                                                              effective_neuron_type,
-                                                                                              force_cpu, iters)
+    distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = dist_batch_data_sets_for_all_layer(
+        mdl1, mdl2, X1, X2,
+        layer_names1,
+        layer_names2, dist_type,
+        downsample_method,
+        downsample_size,
+        effective_neuron_type,
+        force_cpu, iters,
+        metrics_as_dist
+        )
     # list(OrderDict([B, L, 1])) -> list([B, L, 1])
-    _distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(distances_per_data_sets_per_layer)
+    _distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
+        distances_per_data_sets_per_layer)
     _distances_per_data_sets_per_layer: Tensor = tensorify(_distances_per_data_sets_per_layer)
     # - [B, L, 1] -> [L, 1], get the avg distance/sim for each layer (and std)
     means_per_layer: Tensor = _distances_per_data_sets_per_layer.mean(dim=0)
@@ -361,7 +378,8 @@ def stats_distance_entire_net(mdl1: nn.Module, mdl2: nn.Module,
                               downsample_size: Optional[int] = None,
                               effective_neuron_type: str = 'filter',
                               force_cpu: bool = False,
-                              iters: int = 1) -> tuple[float]:
+                              iters: int = 1,
+                              metrics_as_dist: bool = True) -> tuple[float]:
     """
     Compute the overall stats of distances per layer
         [B, M, C, H, W] -> pair of [1, 1]
@@ -376,7 +394,8 @@ def stats_distance_entire_net(mdl1: nn.Module, mdl2: nn.Module,
         downsample_method,
         downsample_size,
         effective_neuron_type,
-        force_cpu, iters)
+        force_cpu, iters,
+        metrics_as_dist)
     # list(OrderDict([B, L, 1])) -> list([B, L, 1])
     _distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
         distances_per_data_sets_per_layer)
@@ -386,6 +405,7 @@ def stats_distance_entire_net(mdl1: nn.Module, mdl2: nn.Module,
     std: Tensor = _distances_per_data_sets_per_layer.std(dim=[0, 1])
     return mu, std
 
+
 def pprint_results(mus: OrderedDict, stds: OrderedDict):
     print('---- stats of results per layer')
     print('-- mus (means) per layer')
@@ -393,6 +413,40 @@ def pprint_results(mus: OrderedDict, stds: OrderedDict):
     print('-- stds (standard devs) per layer')
     pprint(stds)
     print()
+
+
+# - helpers
+
+def stats_compare_two_nets_per_layer(mdl1: nn.Module, mdl2: nn.Module,
+                     X: Tensor,
+                     layer_names: list[str],
+                     dist_type: str,
+                     downsample_method: Optional[str] = 'avg_pool',
+                     downsample_size: Optional[int] = None,
+                     effective_neuron_type: str = 'filter',
+                     force_cpu: bool = False,
+                     iters: int = 1,
+                     metrics_as_dist: bool = True) -> tuple[OrderedDict]:
+    mus, stds = stats_distance_per_layer(mdl1, mdl2, X, layer_names, layer_names, dist_type,
+                                         downsample_method, downsample_size, effective_neuron_type,
+                                         force_cpu, iters, metrics_as_dist)
+    return mus, stds
+
+
+def stats_compare_two_nets_entire_net(mdl1: nn.Module, mdl2: nn.Module,
+                     X: Tensor,
+                     layer_names: list[str],
+                     dist_type: str,
+                     downsample_method: Optional[str] = 'avg_pool',
+                     downsample_size: Optional[int] = None,
+                     effective_neuron_type: str = 'filter',
+                     force_cpu: bool = False,
+                     iters: int = 1,
+                     metrics_as_dist: bool = True) -> tuple[float]:
+    mus, stds = stats_distance_entire_net(mdl1, mdl2, X, layer_names, layer_names, dist_type,
+                                         downsample_method, downsample_size, effective_neuron_type,
+                                         force_cpu, iters, metrics_as_dist)
+    return mus, stds
 
 # - tests
 
@@ -406,6 +460,7 @@ def dist_per_layer_test():
 
     from uutils.torch_uu.models.learner_from_opt_as_few_shot_paper import get_default_learner_from_default_args, \
         get_feature_extractor_layers
+    from uutils.torch_uu import approx_equal
 
     # - very simple sanity check
     Cin: int = 3
@@ -421,26 +476,47 @@ def dist_per_layer_test():
     C, H, W = Cin, 84, 84
     downsample_size = None
     dist_type = 'pwcca'
-    # --
+    # -- same model same data, should be dist ~ 0.0
     X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
-    mus, stds = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    mus, stds = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names, dist_type,
+                                         downsample_size=downsample_size)
     pprint_results(mus, stds)
-    assert(mus != stds)
-
-    mu, std = stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    assert (mus != stds)
+    mu, std = stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names, dist_type,
+                                        downsample_size=downsample_size)
     print(f'----entire net result: {mu=}, {std=}')
+    assert (approx_equal(mu, 0.0))
 
-    # --
+    # -- differnt data different nets dist ~ 1.0, large distance
     X1: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
     X2: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
-    mus, stds = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    mus, stds = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names, layer_names, dist_type,
+                                         downsample_size=downsample_size)
     pprint_results(mus, stds)
-    assert(mus != stds)
-
-    mu, std = stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names, dist_type, downsample_size=downsample_size)
+    assert (mus != stds)
+    mu, std = stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names, dist_type,
+                                        downsample_size=downsample_size)
     print(f'----entire net result: {mu=}, {std=}')
+    assert (approx_equal(mu, 1.0, tolerance=0.4))
+
+    # -- same data same net, should be identical sim ~ 1.0
+    metrics_as_dist: bool = False
+    print(f'{metrics_as_dist=}')
+    X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+    mus, stds = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names, dist_type,
+                                         downsample_size=downsample_size)
+    pprint_results(mus, stds)
+    assert (mus != stds)
+    mu, std = stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names, dist_type,
+                                        downsample_size=downsample_size, metrics_as_dist=metrics_as_dist)
+    print(f'----entire net result: {mu=}, {std=}')
+    assert (approx_equal(mu, 1.0))
 
 
 if __name__ == '__main__':
+    import uutils
+
+    start = time.time()
     dist_per_layer_test()
+    print(f'time_passed_msg = {uutils.report_times(start)}')
     print('Done, success\a')
