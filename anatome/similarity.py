@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import math
 from functools import partial
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Any
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+import uutils.torch_uu
 from .utils import _irfft, _rfft, _svd, fftfreq
+
 
 def _check_shape_equal(x: Tensor,
                        y: Tensor,
@@ -16,10 +19,12 @@ def _check_shape_equal(x: Tensor,
     if x.size(dim) != y.size(dim):
         raise ValueError(f'x.size({dim}) == y.size({dim}) is expected, but got {x.size(dim)=}, {y.size(dim)=} instead.')
 
+
 def _zero_mean(input: Tensor,
                dim: int
                ) -> Tensor:
     return input - input.mean(dim=dim, keepdim=True)
+
 
 def _matrix_normalize(input: Tensor,
                       dim: int
@@ -39,6 +44,7 @@ def _matrix_normalize(input: Tensor,
     X_centered: Tensor = _zero_mean(input, dim=dim)
     X_star: Tensor = X_centered / norm(X_centered, "fro")
     return X_star
+
 
 def cca_by_svd(x: Tensor,
                y: Tensor
@@ -101,8 +107,8 @@ def cca(x: Tensor,
     Returns: x-side coefficients, y-side coefficients, diagonal
 
     """
-    assert(x.size(0) == y.size(0)), f'Traditional CCA needs same number of data points for both data matrices' \
-                                    f'for it to work but got {x.size(0)=} and {y.size(0)=}'
+    assert (x.size(0) == y.size(0)), f'Traditional CCA needs same number of data points for both data matrices' \
+                                     f'for it to work but got {x.size(0)=} and {y.size(0)=}'
     if x.size(0) < x.size(1) or y.size(0) < y.size(1):
         import logging
         logging.warning(f'Warning, you have less data points than features in one of your data matrices: '
@@ -249,6 +255,7 @@ def linear_cka_distance(x: Tensor,
         norm_y = _debiased_dot_product_similarity(norm_y.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
     return 1 - dot_prod / (norm_x * norm_y)
 
+
 def orthogonal_procrustes_distance(x: Tensor,
                                    y: Tensor,
                                    ) -> Tensor:
@@ -272,6 +279,7 @@ def orthogonal_procrustes_distance(x: Tensor,
     # note: ||x||_F = 1, ||y||_F = 1
     # - note this already outputs it between [0, 1] e.g. it's not 2 - 2 nuclear_norm(<x1, x2>) due to 0.5*d_proc(x, y)
     return 1 - nuclear_norm(x.t() @ y)
+
 
 class SimilarityHook(object):
     """ Hook to compute CCAs and CKA distance between modules in given models ::
@@ -391,23 +399,45 @@ class SimilarityHook(object):
                  other: SimilarityHook,
                  *,
                  downsample_method: Optional[str] = 'avg_pool',
-                 size: Optional[int] = None,
-                 effective_neuron_type: str = 'filter'
+                 downsample_size: Optional[int] = None,
+                 effective_neuron_type: str = 'filter',
+                 subsample_effective_num_data_by_method: Optional[str] = None,
+                 subsample_effective_num_data_param: Optional[Any] = 20
                  ) -> float:
-        """ Compute CCA distance between self and other.
+        """ Compute CCA distance between self and other with subsampling and downsapling options.
+
+        Note:
+            - downsample_method: downsamples the spatial [H, W] dimensions.
+            - subsample_method: subsamples the effective number data dimensions that goes into the similarity functions
+            so it transformed layer matrices [N, D] to [N', D].
 
         Args:
-            other: Another hook
-            downsample_method: method for downsampling. avg_pool or dft.
-            size: size of the feature map after downsampling
-            effective_neuron_type: how to define a nueron. Default filter means each filter is a neuron so each patch of
+            :param other: Another hook
+            :param downsample_method: method for downsampling. avg_pool or dft.
+            :param downsample_size: size of the feature map after downsampling
+            :param effective_neuron_type: how to define a nueron. Default filter means each filter is a neuron so each patch of
                 data is a data point. Yields [M, C, H, W] -> [MHW -> C].
                 Each neuron vector will have size [MHW, 1] for each filter/neuron.
                 Other option activation means a neuron is one of the CHW activations. Yields [M, C, H, W] -> [M, CHW]
                 Each neuron vector will have size [M, 1] for each activation/neuron.
-
+            :param subsample_effective_num_data_by_method: subsamples the number of effective data points (data points in the layer
+                matrix e.g. if effective_neuron_type is filter and you want then [NHW]).
+                - (recommended) safe_number_effective_data_points, subsamples according to N'=k*20' where k=20 where
+                20 is based on previous work/santity checks to where similarity metric looks it's converged to true
+                similarity (when using random data, which is easier to see the convergence).
+                - number_of_specific_effective_data_points does flatten_acts[::x, :] to give about [N', D'] -> [N'/x, D]
+                - specific_ratio_effective_data_to_effective_dim: subsamples to make N'/D' = k be true for provided k
+                by user. We recommend k be at least 5 or 10. Otherwise, run your own santity checks on your data set
+                if you want precision (but takes more research cycles).
+            :param subsample_effective_num_data_param: recommended value None or 'safe_number_effective_data_points'
+                - subsample_effective_num_data_by_method == safe_number_effective_data_points is such that the
+                N' in the subsampled matrix satisfied N'=20*D' in [N', D']
+                - for subsample_effective_num_data_by_method == number_of_specific_effective_data_points this params indicates
+                the specific number of data points the layer matrices with be reduces from [N, D] -> [N', D] so N'
+                - subsample_effective_num_data_by_method == subsample_effective_num_data_by_method is such that
+                N' = subsample_effective_num_data_param*D' so subsample_effective_num_data_param is the number of times the data
+                set should be larger than the number of dimension/neurons in the layer matrices.
         Returns: returns distance
-
         """
         self_tensor = self.hooked_tensors
         other_tensor = other.hooked_tensors
@@ -421,82 +451,97 @@ class SimilarityHook(object):
             raise RuntimeError('Dimensions of hooked tensors need to be same, '
                                f'but got {self_tensor.dim()=} and {other_tensor.dim()=}')
 
-        if self_tensor.dim() == 2:   # - output of FCNN so it's a matrix e.g. [N, D]
+        if self_tensor.dim() == 2:  # - output of FCNN so it's a matrix e.g. [N, D]
             return self.cca_function(self_tensor, other_tensor).item()
         else:
             M, C, H, W = self_tensor.size()
             if effective_neuron_type == 'filter':
                 # print(f'{effective_neuron_type=}')
                 # - [M, C, H, W] -> [M*H'*W', C] where H', W' corresponds to spatial size after downsampling (if done)
-                if size is None:
+                if downsample_size is None:
                     # -- [M, C, H, W] -> [MHW, C] = [N, D]
                     # - [M, C, H, W] -> [M, H, W, C]
                     self_tensor = self_tensor.permute(0, 2, 3, 1)
                     other_tensor = other_tensor.permute(0, 2, 3, 1)
-                    assert(self_tensor.size() == torch.Size([M, H, W, C]))
+                    assert (self_tensor.size() == torch.Size([M, H, W, C]))
                     # - [M, H, W, C] -> [MHW, C]
                     self_tensor = self_tensor.flatten(start_dim=0, end_dim=2)
                     other_tensor = other_tensor.flatten(start_dim=0, end_dim=2)
-                    assert(self_tensor.size() == torch.Size([M*H*W, C]))
+                    assert (self_tensor.size() == torch.Size([M * H * W, C]))
+                    # - [MHW, C] -> [subsample(MHW), C] = [N', D']
+                    self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor,
+                                                                                 subsample_effective_num_data_by_method,
+                                                                                 subsample_effective_num_data_param)
+                    other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor,
+                                                                                  subsample_effective_num_data_by_method,
+                                                                                  subsample_effective_num_data_param)
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
                 else:
                     # -- [M, C, H, W] -> [M*H*W, C] = [N, D]
                     # [M, C, H, W] -> [size^2, B, C]
                     downsample_method = downsample_method or 'avg_pool'
-                    self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
-                    other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
-                    assert(self_tensor.size() == torch.Size([size**2, M, C]))
-                    # [size ^ 2, B, C] -> [size^2*B, C]
+                    self_tensor = self._downsample_4d(self_tensor, downsample_size, downsample_method)
+                    other_tensor = self._downsample_4d(other_tensor, downsample_size, downsample_method)
+                    assert (self_tensor.size() == torch.Size([downsample_size ** 2, M, C]))
+                    # [downsample_size ^ 2, B, C] -> [downsample_size^2*B, C]
                     self_tensor = self_tensor.flatten(start_dim=0, end_dim=1)
                     other_tensor = other_tensor.flatten(start_dim=0, end_dim=1)
-                    assert(self_tensor.size() == torch.Size([M*size**2, C]))
+                    assert (self_tensor.size() == torch.Size([M * downsample_size ** 2, C]))
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
             elif effective_neuron_type == 'activation':
                 # print(f'{effective_neuron_type=}')
                 # - [M, C, H, W] -> [M, C*H'*W'] = [N, D]
-                if size is None:
+                if downsample_size is None:
                     # -- [M, C, H, W] -> [M, CHW] = [N, D]
                     # - [M, C, H, W] -> [M, CHW]
                     self_tensor = self_tensor.flatten(start_dim=1, end_dim=-1)
                     other_tensor = other_tensor.flatten(start_dim=1, end_dim=-1)
-                    assert(self_tensor.size() == torch.Size([M, C*H*W]))
+                    assert (self_tensor.size() == torch.Size([M, C * H * W]))
+                    # - [MHW, C] -> [subsample(MHW), C] = [N', D']
+                    self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor,
+                                                                                 subsample_effective_num_data_by_method,
+                                                                                 subsample_effective_num_data_param)
+                    other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor,
+                                                                                  subsample_effective_num_data_by_method,
+                                                                                  subsample_effective_num_data_param)
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
                 else:
                     # -- [M, C, H, W] -> [M, C*H'*W'] = [N, D]
-                    # [M, C, H, W] -> [size^2, B, C]
+                    # [M, C, H, W] -> [downsample_size^2, B, C]
                     downsample_method = downsample_method or 'avg_pool'
-                    self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
-                    other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
-                    assert(self_tensor.size() == torch.Size([size**2, M, C]))
-                    # [size^2, B, C] -> [B, size^2, C]
+                    self_tensor = self._downsample_4d(self_tensor, downsample_size, downsample_method)
+                    other_tensor = self._downsample_4d(other_tensor, downsample_size, downsample_method)
+                    assert (self_tensor.size() == torch.Size([downsample_size ** 2, M, C]))
+                    # [downsample_size^2, B, C] -> [B, downsample_size^2, C]
                     self_tensor = self_tensor.permute(1, 0, 2)
                     other_tensor = other_tensor.permute(1, 0, 2)
-                    assert(self_tensor.size() == torch.Size([M, size**2, C]))
-                    # [B, size^2, C] -> [B, size^2 * C]
+                    assert (self_tensor.size() == torch.Size([M, downsample_size ** 2, C]))
+                    # [B, downsample_size^2, C] -> [B, downsample_size^2 * C]
                     self_tensor = self_tensor.flatten(start_dim=1, end_dim=-1)
                     other_tensor = other_tensor.flatten(start_dim=1, end_dim=-1)
-                    assert(self_tensor.size() == torch.Size([M, (size**2)*C]))
+                    assert (self_tensor.size() == torch.Size([M, (downsample_size ** 2) * C]))
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
             elif effective_neuron_type == 'original_anatome':
                 # print(f'{effective_neuron_type=}')
-                dist: float = distance_cnn_original_anatome(self, size, downsample_method, self_tensor, other_tensor)
+                dist: float = distance_cnn_original_anatome(self, downsample_size, downsample_method, self_tensor,
+                                                            other_tensor)
                 return dist
             else:
                 raise ValueError(f'Invalid effective_neuron_type: {effective_neuron_type=}')
 
     @staticmethod
     def _downsample_4d(input: Tensor,
-                       size: int,
+                       downsample_size: int,
                        backend: str
                        ) -> Tensor:
         """
-        Downsample 4D tensor of [B, C, H, W] ([B, C, H, W] -> [HW, B, C])
-        to 3D tensor of [size^2, B, C] ([B, C, H, W] -> [HW, B, C]).
-            does: [B, C, H, W] -> [size^2, B, C]
+        Downsample 4D tensor of [B, C, H, W] (i.e. [B, C, H, W] -> [HW, B, C])
+        to 3D tensor of [downsample_size^2, B, C] (i.e. [B, C, H, W] -> [HW, B, C]).
+            does: [B, C, H, W] -> [downsample_size^2, B, C]
         """
 
         if input.dim() != 4:
@@ -505,18 +550,18 @@ class SimilarityHook(object):
         # todo: what if channel-last?
         b, c, h, w = input.size()
 
-        if (size, size) == (h, w):
+        if (downsample_size, downsample_size) == (h, w):
             return input.flatten(2).permute(2, 0, 1)
 
-        if (size, size) > (h, w):
-            raise RuntimeError(f'size is expected to be smaller than h or w, but got {h=}, {w=}.')
+        if (downsample_size, downsample_size) > (h, w):
+            raise RuntimeError(f'downsample_size is expected to be smaller than h or w, but got {h=}, {w=}.')
 
         if backend not in ('avg_pool', 'dft'):
             raise RuntimeError(f'backend is expected to be avg_pool or dft, but got {backend=}.')
 
         if backend == 'avg_pool':
-            input = F.adaptive_avg_pool2d(input=input, output_size=(size, size))
-
+            # [B, C, H, W] -> [B, C, downsample_size, downsample_size]
+            input = F.adaptive_avg_pool2d(input=input, output_size=(downsample_size, downsample_size))
         else:
             # almost PyTorch implant of
             # https://github.com/google/svcca/blob/master/dft_ccas.py
@@ -525,21 +570,85 @@ class SimilarityHook(object):
             h = input.size(2)
             input_fft = _rfft(input, 2, normalized=True, onesided=False)
             freqs = fftfreq(h, 1 / h, device=input.device)
-            idx = (freqs >= -size / 2) & (freqs < size / 2)
+            idx = (freqs >= -downsample_size / 2) & (freqs < downsample_size / 2)
             # BxCxHxWx2 -> BxCxhxwx2
             input_fft = input_fft[..., idx, :][..., idx, :, :]
             input = _irfft(input_fft, 2, normalized=True, onesided=False)
-
-        # BxCxHxW -> (HW)xBxC
         # [B, C, H, W] -> [HW, B, C]
         input = input.flatten(start_dim=2, end_dim=-1).permute(2, 0, 1)
         return input
+
+
+def _subsample_matrix_in_effective_num_data_points(hook: SimilarityHook,
+                                                   data_matrix: Tensor,
+                                                   subsample_effective_num_data_by_method: str,
+                                                   subsample_effective_num_data_param: Optional[Any] = 20) -> Tensor:
+    """
+    Subsamples a data matrix by reducing the number of data points.
+        [N, D] -> [N', D']
+    Common approach is to have the data matrix we plug in to CCA (of size [N', D']) to satisfy: N' = 20*D' so that
+    CCA returns a trustworthy similarity result.
+    Notes:
+    1. correctness: subsample_effective_data_by_method == 'safe_number_effective_data_points'
+    - we want N'=20*D'=s*D.
+    - but sampling every k via x[::k, :] gives us p = ceil(N/k) ~ N/k data back which will be N'
+    - bu we want N' = p ~ N/k = s*D, only unknown is k=subsampling_freq
+    - so k = subsampling_freq ~ N/s*D
+    2. correctness: subsample_effective_data_by_method == 'number_of_specific_effective_data_points'
+    - we want N' = x = subsample_effective_num_data_param given by user.
+    - so how much do we need to subsampling if x[::k, :] gives us p = ceil(N/k) ~ N/k data back?
+    - solve N' = N/k ~ x = subsample_effective_num_data_param
+    - subsample by k ~ N / x = N / subsample_effective_num_data_param
+    3. correctness: subsample_effective_data_by_method == 'specific_ratio_effective_data_to_effective_dim' same as 1
+    - same as 1.
+
+    :param hook:
+    :param data_matrix: first dim is number of points, last is number of dimensions [N, D]
+        e.g. D is the number of effective neurons (e.g. D=C), N is the number of effective data points (e.g. N=BHW)
+    :param subsample_effective_data_by_method:
+    :return:
+    """
+    from uutils.torch_uu import approx_equal
+    assert (data_matrix.size() == 2), f'Input has to be a matrix (2D tensor) but tensor with shape: {data_matrix.size()}'
+    N, D = data_matrix.size()
+    # - check if to use safe value i.e. N' = 20*D' = s*D'
+    if subsample_effective_num_data_by_method == 'safe_number_effective_data_points':
+        subsample_effective_num_data_by_method: str = 'specific_ratio_effective_data_to_effective_dim'
+        subsample_effective_num_data_param: int = subsample_effective_num_data_param or 20
+    # - Subsample numner of data points: [N, D] -> [N', D]
+    if subsample_effective_num_data_by_method is None:
+        # - NOP: [N, D] -> [N, D]
+        return data_matrix
+    elif subsample_effective_num_data_by_method == 'safe_number_effective_data_points' \
+            or subsample_effective_num_data_by_method == 'specific_ratio_effective_data_to_effective_dim':
+        # - sample such that [N, D]->[N', D] such that N' satisfies N' = 20*D'= safe_ratio*D' (DEFAULT)
+        subsampling_freq: int = math.floor(N / (subsample_effective_num_data_param * D))
+        data_matrix: Tensor = data_matrix[::subsampling_freq, :]
+        # - error of 2 is fine
+        N_effective: int = data_matrix.size(0)
+        err_msg: str = f'We want the effective number of data to be N\'={subsample_effective_num_data_param}*{D}' \
+                       f'but is N\'={N_effective}'
+        assert (uutils.torch_uu.approx_equal(N_effective, subsample_effective_num_data_param * D, tolerance=2)), err_msg
+        return data_matrix
+    elif subsample_effective_num_data_by_method == 'number_of_specific_effective_data_points':
+        # - sample such that [N, D]->[N', D] such that we have N'=subsample_effective_num_data_param, specific number of effective data
+        subsampling = math.ceil(N / subsample_effective_num_data_param)
+        data_matrix: Tensor = data_matrix[::subsampling, :]
+        # - error of 2 is fine
+        N_effective: int = data_matrix.size(0)
+        err_msg: str = f'We want the effective number of data to be N\'={subsample_effective_num_data_param} ' \
+                       f'but is N\'={N_effective}'
+        assert (approx_equal(N_effective, subsample_effective_num_data_param, tolerance=2)), err_msg
+        return data_matrix
+    else:
+        raise ValueError(f'not implemented: {subsample_effective_num_data_by_method=}')
 
 
 # - for backward compatibility
 # SimilarityHook = DistanceHook
 # - comment this out once the forward merge has been done
 DistanceHook = SimilarityHook
+
 
 def original_computation_of_distance_from_Ryuichiro_Hataya(self: DistanceHook,
                                                            self_tensor: Tensor,
@@ -548,6 +657,7 @@ def original_computation_of_distance_from_Ryuichiro_Hataya(self: DistanceHook,
                         for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
                         ]
                        ).mean().item()
+
 
 def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: DistanceHook,
                                                                    self_tensor: Tensor,
@@ -569,7 +679,8 @@ def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: Distanc
     :param other_tensor:
     :return:
     """
-    assert (self_tensor.dim() == 3), f'Expects a flattened conv layer tensor so a tensor of 3 dims but got: {self_tensor.size()}'
+    assert (
+            self_tensor.dim() == 3), f'Expects a flattened conv layer tensor so a tensor of 3 dims but got: {self_tensor.size()}'
     M, F, HW = self_tensor.size()
     # - remove the first dimension to get a list of all the tensors [M, F, HW] -> list([F, HW]) of M elements
     self_tensor: tuple[Tensor] = self_tensor.unbind()
@@ -587,8 +698,9 @@ def original_computation_of_distance_from_Ryuichiro_Hataya_as_loop(self: Distanc
     dist: float = dists_for_wrt_entire_data_points.mean().item()
     return dist
 
-def downsampling_original_anatome(self: DistanceHook, self_tensor: Tensor, other_tensor: Tensor,
-                                  downsample_method: Optional[str], size: Optional[int]):
+
+def downsampling_choice_logic_original_anatome(self: DistanceHook, self_tensor: Tensor, other_tensor: Tensor,
+                                               downsample_method: Optional[str], size: Optional[int]):
     # - convolution layer [M, C, H, W]
     if size is None:
         # no downsampling: [M, C, H, W] -> [M, C, H*W]
@@ -606,11 +718,12 @@ def downsampling_original_anatome(self: DistanceHook, self_tensor: Tensor, other
                         ]
                        ).mean().item()
 
+
 def distance_cnn_original_anatome(self: DistanceHook, size: Optional[int],
-             downsample_method: Optional[str],
-             self_tensor: Tensor,
-             other_tensor: Tensor
-             ) -> float:
+                                  downsample_method: Optional[str],
+                                  self_tensor: Tensor,
+                                  other_tensor: Tensor
+                                  ) -> float:
     """
     Original anatome.
     """
