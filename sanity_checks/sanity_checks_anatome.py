@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 import uutils.torch_uu
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_named_identity_one_layer_linear_model
 
 print('--- Sanity check: sCCA = 1.0 when using same net twice with same input. --')
@@ -20,31 +20,31 @@ mdl2: nn.Module = mdl1
 layer_name = 'fc0'
 
 # - ends up comparing two matrices of size [B, Dout], on same data, on same model
-cxa_dist_type = 'svcca'
+metric_comparison_type = 'svcca'
 X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, Din))
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 print(f'Is it close to 1.0? {approx_equal(sim, 1.0)}')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
-cxa_dist_type = 'pwcca'
+metric_comparison_type = 'pwcca'
 X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, Din))
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 print(f'Is it close to 1.0? {approx_equal(sim, 1.0)}')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
-cxa_dist_type = 'lincka'
+metric_comparison_type = 'lincka'
 X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, Din))
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 print(f'Is it close to 1.0? {approx_equal(sim, 1.0)}')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
-cxa_dist_type = 'opd'
+metric_comparison_type = 'opd'
 X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, Din))
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 print(f'Is it close to 1.0? {approx_equal(sim, 1.0, tolerance=1e-2)}')
 assert(approx_equal(sim, 1.0, tolerance=1e-2)), f'Sim should be close to 1.0 but got {sim=}'
 
@@ -67,7 +67,7 @@ import torch
 import torch.nn as nn
 
 import uutils
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_named_one_layer_random_linear_model
 
 import uutils.plot as uulot
@@ -79,13 +79,13 @@ Dout: int = 100
 mdl1: nn.Module = get_named_one_layer_random_linear_model(B, Dout)
 mdl2: nn.Module = get_named_one_layer_random_linear_model(B, Dout)
 layer_name = 'fc0'
-# cxa_dist_type = 'pwcca'
-cxa_dist_type = 'svcca'
+# metric_comparison_type = 'pwcca'
+metric_comparison_type = 'svcca'
 
 # - get sim for B << D e.g. [B=10, D=300] easy to "fit", to many degrees of freedom
 X: torch.Tensor = uutils.torch_uu.get_identity_data(B)
 # mdl1(X) : [B, Dout] = [B, B] [B, Dout]
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
 print(f'Should be very very close to 1.0: {sim=} (since we have many features to match the two Xw1, Yw2).')
 print(f'Is it close to 1.0? {approx_equal(sim, 1.0)}')
 assert(approx_equal(sim, 1.0))
@@ -102,7 +102,7 @@ for b in data_sizes:
     mdl1: nn.Module = get_named_one_layer_random_linear_model(b, Dout)
     mdl2: nn.Module = get_named_one_layer_random_linear_model(b, Dout)
     # print(f'{b=}')
-    sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
+    sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
     # print(f'{sim=}')
     sims.append(sim)
 
@@ -118,7 +118,7 @@ import torch
 import torch.nn as nn
 
 import uutils
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_named_one_layer_random_linear_model
 
 from uutils.plot import plot, save_to_desktop
@@ -130,11 +130,11 @@ Dout: int = 300
 mdl1: nn.Module = get_named_one_layer_random_linear_model(Din, Dout)
 mdl2: nn.Module = get_named_one_layer_random_linear_model(Din, Dout)
 layer_name = 'fc0'
-# cxa_dist_type = 'pwcca'
-cxa_dist_type = 'svcca'
+# metric_comparison_type = 'pwcca'
+metric_comparison_type = 'svcca'
 
 X: torch.Tensor = uutils.torch_uu.get_identity_data(B)
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
 print(f'Should be very very close to 1.0: {sim=}')
 print(f'Is it close to 1.0? {approx_equal(sim, 1.0)}')
 assert(approx_equal(sim, 1.0))
@@ -147,7 +147,7 @@ for d in D_feature_sizes:
     X: torch.Tensor = uutils.torch_uu.get_identity_data(B)
     mdl1: nn.Module = get_named_one_layer_random_linear_model(B, d)
     mdl2: nn.Module = get_named_one_layer_random_linear_model(B, d)
-    sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, cxa_dist_type=cxa_dist_type)
+    sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=None, iters=1, metric_comparison_type=metric_comparison_type)
     # print(f'{d=}, {sim=}')
     sims.append(sim)
 

@@ -9,7 +9,7 @@ from copy import deepcopy
 import torch
 import torch.nn as nn
 
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_single_conv_model
 import anatome
 print(f'from import: {anatome=}')
@@ -27,26 +27,26 @@ layer_name = 'conv1'
 B: int = 4
 C, H, W = Cin, 64, 64
 # downsample_size = None
-cxa_dist_type = 'svcca'
-cxa_dist_type = 'pwcca'
+metric_comparison_type = 'svcca'
+metric_comparison_type = 'pwcca'
 X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, C, H, W))
 
 # - compute sim for NO downsample: so layer matrix is []
 downsample_size = None
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sim for downsample
 downsample_size: int = 5
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sim for downsample
 downsample_size: int = 1
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 
@@ -60,7 +60,7 @@ from copy import deepcopy
 import torch
 import torch.nn as nn
 
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_single_conv_model
 import anatome
 
@@ -68,20 +68,20 @@ effective_neuron_type: str = 'activation'
 
 # - compute sim for NO downsample: so layer matrix is []
 downsample_size = None
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type, effective_neuron_type=effective_neuron_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sim for downsample
 downsample_size: int = 5
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type, effective_neuron_type=effective_neuron_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sim for downsample
 downsample_size: int = 1
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type, effective_neuron_type=effective_neuron_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 
@@ -95,11 +95,11 @@ from copy import deepcopy
 import torch
 import torch.nn as nn
 
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_single_conv_model
 import anatome
 
-from uutils.torch_uu import cxa_sim, approx_equal
+from uutils.torch_uu import get_metric, approx_equal
 from uutils.torch_uu.models import get_single_conv_model
 import anatome
 
@@ -107,18 +107,18 @@ effective_neuron_type: str = 'original_anatome'
 
 # - compute sim for NO downsample: so layer matrix is []
 downsample_size = None
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type, effective_neuron_type=effective_neuron_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sim for downsample
 downsample_size: int = 5
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type, effective_neuron_type=effective_neuron_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sim for downsample
 downsample_size: int = 1
-sim: float = cxa_sim(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, cxa_dist_type=cxa_dist_type, effective_neuron_type=effective_neuron_type)
-print(f'Should be very very close to 1.0: {sim=} ({cxa_dist_type=})')
+sim: float = get_metric(mdl1, mdl2, X, layer_name, downsample_size=downsample_size, iters=1, metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type)
+print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert(approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'

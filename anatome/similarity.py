@@ -464,19 +464,24 @@ class SimilarityHook(object):
             if downsample_method is not None:
                 # [M, C, H, W] -> [size^2, M, C]
                 # downsample_method = downsample_method or 'avg_pool'
+                assert (downsample_size is not None), f'downsample_size should not be None it\'s: {downsample_size=}'
                 self_tensor = self._downsample_4d(self_tensor, downsample_size, downsample_method)
                 other_tensor = self._downsample_4d(other_tensor, downsample_size, downsample_method)
-                assert (self_tensor.size() == torch.Size([downsample_size ** 2, M, C]))
-                # [downsample_size ^ 2, M, C] -> [downsample_size^2*M, C]
-                self_tensor = self_tensor.flatten(start_dim=0, end_dim=1)
-                other_tensor = other_tensor.flatten(start_dim=0, end_dim=1)
-                assert (self_tensor.size() == torch.Size([M * (downsample_size ** 2), C]))
                 H, W = downsample_size, downsample_size
+            else:
+                # - [B, C, H, W] -> [HW, B, C]
+                # [B, C, H, W] -> [B, C, HW]
+                self_tensor = self_tensor.flatten(start_dim=2, end_dim=-1)
+                other_tensor = other_tensor.flatten(start_dim=2, end_dim=-1)
+                # [B, C, HW]  -> [HW, B, C]
+                self_tensor = self_tensor.permute(2, 0, 1)
+                other_tensor = other_tensor.permute(2, 0, 1)
+            assert (self_tensor.size() == torch.Size([H*W, M, C]))
             # - invaraint end of this we have [H'W', M, C]
 
             # -- process according to effective neuron type
             if effective_neuron_type == 'filter':
-                # -- overall want: [M, C, H, W] -> [M, CHW] = [N, D]
+                # -- overall want: [M, C, H, W] -> [MHW, C] = [N, D]
                 # - [H'W', M, C] -> [MH'W', C]
                 self_tensor = self_tensor.flatten(start_dim=0, end_dim=1)
                 other_tensor = other_tensor.flatten(start_dim=0, end_dim=1)
@@ -562,8 +567,11 @@ class SimilarityHook(object):
             # BxCxHxWx2 -> BxCxhxwx2
             input_fft = input_fft[..., idx, :][..., idx, :, :]
             input = _irfft(input_fft, 2, normalized=True, onesided=False)
-        # [B, C, H, W] -> [HW, B, C]
-        input = input.flatten(start_dim=2, end_dim=-1).permute(2, 0, 1)
+        # - [B, C, H, W] -> [HW, B, C]
+        # [B, C, H, W] -> [B, C, HW]
+        input = input.flatten(start_dim=2, end_dim=-1)
+        # [B, C, HW]  -> [HW, B, C]
+        input = input.permute(2, 0, 1)
         return input
 
 
