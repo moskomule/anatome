@@ -401,15 +401,15 @@ class SimilarityHook(object):
                  downsample_method: Optional[str] = 'avg_pool',
                  downsample_size: Optional[int] = None,
                  effective_neuron_type: str = 'filter',
-                 subsample_effective_num_data_by_method: Optional[str] = None,
-                 subsample_effective_num_data_param: Optional[Any] = 20
+                 subsample_effective_num_data_method: Optional[str] = None,
+                 subsample_effective_num_data_param: Optional[int] = None
                  ) -> float:
         """ Compute CCA distance between self and other with subsampling and downsapling options.
 
         Note:
             - downsample_method: downsamples the spatial [H, W] dimensions.
             - subsample_method: subsamples the effective number data dimensions that goes into the similarity functions
-            so it transformed layer matrices [N, D] to [N', D].
+            so it transformed layer matrices [N, D] to [N', D]. Only for CNNs.
 
         Args:
             :param other: Another hook
@@ -420,23 +420,16 @@ class SimilarityHook(object):
                 Each neuron vector will have size [MHW, 1] for each filter/neuron.
                 Other option activation means a neuron is one of the CHW activations. Yields [M, C, H, W] -> [M, CHW]
                 Each neuron vector will have size [M, 1] for each activation/neuron.
-            :param subsample_effective_num_data_by_method: subsamples the number of effective data points (data points in the layer
-                matrix e.g. if effective_neuron_type is filter and you want then [NHW]).
-                - (recommended) safe_number_effective_data_points, subsamples according to N'=k*20' where k=20 where
-                20 is based on previous work/santity checks to where similarity metric looks it's converged to true
-                similarity (when using random data, which is easier to see the convergence).
-                - number_of_specific_effective_data_points does flatten_acts[::x, :] to give about [N', D'] -> [N'/x, D]
-                - specific_ratio_effective_data_to_effective_dim: subsamples to make N'/D' = k be true for provided k
-                by user. We recommend k be at least 5 or 10. Otherwise, run your own santity checks on your data set
-                if you want precision (but takes more research cycles).
-            :param subsample_effective_num_data_param: recommended value None or 'safe_number_effective_data_points'
-                - subsample_effective_num_data_by_method == safe_number_effective_data_points is such that the
-                N' in the subsampled matrix satisfied N'=20*D' in [N', D']
-                - for subsample_effective_num_data_by_method == number_of_specific_effective_data_points this params indicates
-                the specific number of data points the layer matrices with be reduces from [N, D] -> [N', D] so N'
-                - subsample_effective_num_data_by_method == subsample_effective_num_data_by_method is such that
-                N' = subsample_effective_num_data_param*D' so subsample_effective_num_data_param is the number of times the data
-                set should be larger than the number of dimension/neurons in the layer matrices.
+            :param subsample_effective_num_data_method: subsamples the number of effective data points in a layer matrix
+                for CNNs.
+                - when subsample_effective_num_data_method is None no subsampling in the data dimension is done.
+                - when subsample_effective_num_data_method is 'subsampling_data_to_dims_ratio' the num data dimension is
+                subsampled such that N'=s*D' defaulting to N'=20*D.
+            :param subsample_effective_num_data_param: the parameter value for the subsampling method for CNNs.
+                - if the subsampling method is by ratio of effective data to effective D then it does N'=s*D'
+                where s=20 is a good default value according to previous work. s = None defaults to s=20.
+                - if subsampling method is by sumple_size then user indicates by how much to downsample the number of
+                 effective data. This is not recommended unless the user knows how to select a good s in N'=s*D'.
         Returns: returns distance
         """
         self_tensor = self.hooked_tensors
@@ -452,6 +445,8 @@ class SimilarityHook(object):
                                f'but got {self_tensor.dim()=} and {other_tensor.dim()=}')
 
         if self_tensor.dim() == 2:  # - output of FCNN so it's a matrix e.g. [N, D]
+            # self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor, subsample_effective_num_data_method, subsample_effective_num_data_param)
+            # other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor, subsample_effective_num_data_method, subsample_effective_num_data_param)
             return self.cca_function(self_tensor, other_tensor).item()
         else:
             M, C, H, W = self_tensor.size()
@@ -470,10 +465,10 @@ class SimilarityHook(object):
                     assert (self_tensor.size() == torch.Size([M * H * W, C]))
                     # - [MHW, C] -> [subsample(MHW), C] = [N', D']
                     self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor,
-                                                                                 subsample_effective_num_data_by_method,
+                                                                                 subsample_effective_num_data_method,
                                                                                  subsample_effective_num_data_param)
                     other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor,
-                                                                                  subsample_effective_num_data_by_method,
+                                                                                  subsample_effective_num_data_method,
                                                                                   subsample_effective_num_data_param)
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
@@ -501,10 +496,10 @@ class SimilarityHook(object):
                     assert (self_tensor.size() == torch.Size([M, C * H * W]))
                     # - [MHW, C] -> [subsample(MHW), C] = [N', D']
                     self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor,
-                                                                                 subsample_effective_num_data_by_method,
+                                                                                 subsample_effective_num_data_method,
                                                                                  subsample_effective_num_data_param)
                     other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor,
-                                                                                  subsample_effective_num_data_by_method,
+                                                                                  subsample_effective_num_data_method,
                                                                                   subsample_effective_num_data_param)
                     dist: float = self.cca_function(self_tensor, other_tensor).item()
                     return dist
@@ -581,47 +576,42 @@ class SimilarityHook(object):
 
 def _subsample_matrix_in_effective_num_data_points(hook: SimilarityHook,
                                                    data_matrix: Tensor,
-                                                   subsample_effective_num_data_by_method: str,
-                                                   subsample_effective_num_data_param: Optional[Any] = 20) -> Tensor:
+                                                   subsample_effective_num_data_method: str,
+                                                   subsample_effective_num_data_param: Optional[int] = None) -> Tensor:
     """
     Subsamples a data matrix by reducing the number of data points.
         [N, D] -> [N', D']
     Common approach is to have the data matrix we plug in to CCA (of size [N', D']) to satisfy: N' = 20*D' so that
     CCA returns a trustworthy similarity result.
-    Notes:
-    1. correctness: subsample_effective_data_by_method == 'safe_number_effective_data_points'
-    - we want N'=20*D'=s*D.
-    - but sampling every k via x[::k, :] gives us p = ceil(N/k) ~ N/k data back which will be N'
-    - bu we want N' = p ~ N/k = s*D, only unknown is k=subsampling_freq
-    - so k = subsampling_freq ~ N/s*D
-    2. correctness: subsample_effective_data_by_method == 'number_of_specific_effective_data_points'
-    - we want N' = x = subsample_effective_num_data_param given by user.
-    - so how much do we need to subsampling if x[::k, :] gives us p = ceil(N/k) ~ N/k data back?
-    - solve N' = N/k ~ x = subsample_effective_num_data_param
-    - subsample by k ~ N / x = N / subsample_effective_num_data_param
-    3. correctness: subsample_effective_data_by_method == 'specific_ratio_effective_data_to_effective_dim' same as 1
-    - same as 1.
+
+    Method exokabation:
+    1. correctness: subsample_effective_num_data_method == 'subsampling_data_to_dims_ratio'
+        - we want N'=20*D'=s*D where s=subsample_effective_num_data_param
+        - but sampling every k via x[::k, :] gives us p = ceil(N/k) ~ N/k data back which will be N'
+        - bu we want N' = p ~ N/k = s*D, only unknown is k=subsampling_freq
+        - so k = subsampling_freq ~ N/s*D
+    2. correctness: subsample_effective_num_data_method == 'subsampling_size'
+        - we want N' = x = subsample_effective_num_data_param given by user.
+        - so how much do we need to subsampling if x[::k, :] gives us p = ceil(N/k) ~ N/k data back?
+        - solve N' = N/k ~ x = subsample_effective_num_data_param
+        - subsample by k ~ N / x = N / subsample_effective_num_data_param
 
     :param hook:
     :param data_matrix: first dim is number of points, last is number of dimensions [N, D]
         e.g. D is the number of effective neurons (e.g. D=C), N is the number of effective data points (e.g. N=BHW)
-    :param subsample_effective_data_by_method:
     :return:
     """
     from uutils.torch_uu import approx_equal
     assert (data_matrix.size() == 2), f'Input has to be a matrix (2D tensor) but tensor with shape: {data_matrix.size()}'
     N, D = data_matrix.size()
-    # - check if to use safe value i.e. N' = 20*D' = s*D'
-    if subsample_effective_num_data_by_method == 'safe_number_effective_data_points':
-        subsample_effective_num_data_by_method: str = 'specific_ratio_effective_data_to_effective_dim'
-        subsample_effective_num_data_param: int = subsample_effective_num_data_param or 20
-    # - Subsample numner of data points: [N, D] -> [N', D]
-    if subsample_effective_num_data_by_method is None:
+    # - Subsample number of data points: [N, D] -> [N', D]
+    if subsample_effective_num_data_method is None:
         # - NOP: [N, D] -> [N, D]
         return data_matrix
-    elif subsample_effective_num_data_by_method == 'safe_number_effective_data_points' \
-            or subsample_effective_num_data_by_method == 'specific_ratio_effective_data_to_effective_dim':
-        # - sample such that [N, D]->[N', D] such that N' satisfies N' = 20*D'= safe_ratio*D' (DEFAULT)
+    elif subsample_effective_num_data_method == 'subsampling_data_to_dims_ratio':
+        # - sample such that [N, D]->[N', D] such that N' satisfies N'= s*D' e.g. N'=20*D', 20 is safe according to
+        # svcca paper/previous work
+        subsample_effective_num_data_param: int = subsample_effective_num_data_param or 20
         subsampling_freq: int = math.floor(N / (subsample_effective_num_data_param * D))
         data_matrix: Tensor = data_matrix[::subsampling_freq, :]
         # - error of 2 is fine
@@ -630,7 +620,7 @@ def _subsample_matrix_in_effective_num_data_points(hook: SimilarityHook,
                        f'but is N\'={N_effective}'
         assert (uutils.torch_uu.approx_equal(N_effective, subsample_effective_num_data_param * D, tolerance=2)), err_msg
         return data_matrix
-    elif subsample_effective_num_data_by_method == 'number_of_specific_effective_data_points':
+    elif subsample_effective_num_data_method == 'subsampling_size':
         # - sample such that [N, D]->[N', D] such that we have N'=subsample_effective_num_data_param, specific number of effective data
         subsampling = math.ceil(N / subsample_effective_num_data_param)
         data_matrix: Tensor = data_matrix[::subsampling, :]
@@ -641,7 +631,7 @@ def _subsample_matrix_in_effective_num_data_points(hook: SimilarityHook,
         assert (approx_equal(N_effective, subsample_effective_num_data_param, tolerance=2)), err_msg
         return data_matrix
     else:
-        raise ValueError(f'not implemented: {subsample_effective_num_data_by_method=}')
+        raise ValueError(f'not implemented: {subsample_effective_num_data_method=}')
 
 
 # - for backward compatibility
