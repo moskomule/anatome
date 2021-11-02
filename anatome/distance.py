@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Tuple, Literal
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
+from torchvision.models.feature_extraction import get_graph_node_names, create_feature_extractor
 
-from .utils import _irfft, _rfft, _svd, fftfreq
+from .utils import _irfft, _rfft, _svd
 
 
 def _zero_mean(input: Tensor,
@@ -235,172 +236,155 @@ def orthogonal_procrustes_distance(x: Tensor,
     return 1 - nuclear_norm(x.t() @ y)
 
 
-class DistanceHook(object):
-    """ Hook to compute CCAs and CKA distance between modules in given models ::
-
-        >>> model = resnet18()
-        >>> hook1 = DistanceHook(model, "layer3.0.conv1")
-        >>> hook2 = DistanceHook(model, "layer3.0.conv2")
-        >>> model.eval()
-        >>> with torch.no_grad():
-        >>>     for _ in range(10):
-        >>>         model(torch.randn(120, 3, 224, 224))
-        >>> hook1.distance(hook2, size=8)
+class Distance(object):
+    """ Module to measure distance between `model1` and `model2`
 
     Args:
-        model: Model
-        name: Name of module appeared in `model.named_modules()`
-        distance_func: the method to compute CCA and CKA distance. By default, PWCCA is used.
-        'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
-        force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
+        method: Method to compute distance. 'pwcca' by default.
+        model1_names: Names of modules of `model1` to be used. If None (default), all names are used.
+        model2_names: Names of modules of `model2` to be used. If None (default), all names are used.
+        model1_leaf_modules: Modules of model1 to be considered as single nodes (see https://pytorch.org/blog/FX-feature-extraction-torchvision/).
+        model2_leaf_modules: Modules of model2 to be considered as single nodes (see https://pytorch.org/blog/FX-feature-extraction-torchvision/).
+        train_mode: If True, models' `train_model` is used, otherwise `eval_mode`. False by default.
     """
 
-    _supported_dim = (2, 4)
+    _supported_dims = (2, 4)
     _default_backends = {'pwcca': partial(pwcca_distance, backend='svd'),
                          'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
                          'lincka': partial(linear_cka_distance, reduce_bias=False),
-                         "opd": orthogonal_procrustes_distance}
+                         'opd': orthogonal_procrustes_distance}
 
     def __init__(self,
-                 model: nn.Module,
-                 name: str,
-                 distance_func: Optional[str or Callable] = None,
-                 force_cpu: bool = False,
-                 ) -> None:
+                 model1: nn.Module,
+                 model2: nn.Module,
+                 method: str | Callable = 'pwcca',
+                 model1_names: str | list[str] = None,
+                 model2_names: str | list[str] = None,
+                 model1_leaf_modules: list[nn.Module] = None,
+                 model2_leaf_modules: list[nn.Module] = None,
+                 train_mode: bool = False
+                 ):
 
-        if isinstance(model, (nn.DataParallel, nn.parallel.DistributedDataParallel)):
+        dp_ddp = (nn.DataParallel, nn.parallel.DistributedDataParallel)
+        if isinstance(model1, dp_ddp) or isinstance(model2, dp_ddp):
             raise RuntimeWarning('model is nn.DataParallel or nn.DistributedDataParallel. '
                                  'SimilarityHook may causes unexpected behavior.')
+        if isinstance(method, str):
+            method = self._default_backends[method]
+        self.distance_func = method
+        self.model1 = model1
+        self.model2 = model2
+        self.extractor1 = create_feature_extractor(model1, self.convert_names(model1, model1_names,
+                                                                              model1_leaf_modules, train_mode))
+        self.extractor2 = create_feature_extractor(model2, self.convert_names(model2, model2_names,
+                                                                              model2_leaf_modules, train_mode))
+        self._model1_tensors: dict[str, torch.Tensor] = None
+        self._model2_tensors: dict[str, torch.Tensor] = None
 
-        self.model = model
-        self.module = {k: v for k, v in self.model.named_modules()}[name]
-        if distance_func is None or isinstance(distance_func, str):
-            distance_func = self._default_backends[distance_func or 'pwcca']
-        self.cca_function = distance_func
-        self.name = name
-        self.force_cpu = force_cpu
-        if self.force_cpu:
-            # fully utilize CPUs available
-            from multiprocessing import cpu_count
-            torch.set_num_threads(cpu_count())
-
-        self.device = None
-        self._hooked_tensors = None
-        self._register_hook()
-
-    def _register_hook(self
-                       ) -> None:
-        def hook(*args):
-            output = args[2]
-            if output.dim() not in self._supported_dim:
-                raise RuntimeError(f'CCAHook currently supports tensors of dimension {self._supported_dim}, '
-                                   f'but got {output.dim()} instead.')
-
-            self.device = output.device
-            # store intermediate tensors on CPU to avoid possible CUDA OOM
-            output = output.cpu()
-
-            if self._hooked_tensors is None:
-                self._hooked_tensors = output
-            else:
-                self._hooked_tensors = torch.cat([self._hooked_tensors, output], dim=0).contiguous()
-
-        self.module.register_forward_hook(hook)
-
-    def clear(self
-              ) -> None:
-        """ Clear stored tensors
-        """
-
-        self._hooked_tensors = None
-
-    @property
-    def hooked_tensors(self
-                       ) -> Tensor:
-        if self._hooked_tensors is None:
-            raise RuntimeError('Run model in advance')
-        return self._hooked_tensors
+    def available_names(self,
+                        model1_leaf_modules: list[nn.Module] = None,
+                        model2_leaf_modules: list[nn.Module] = None,
+                        train_mode: bool = False
+                        ):
+        return {'model1': self.convert_names(self.model1, None, model1_leaf_modules, train_mode),
+                'model2': self.convert_names(self.model2, None, model2_leaf_modules, train_mode)}
 
     @staticmethod
-    def create_hooks(model: nn.Module,
-                     names: List[str],
-                     distance_func: Optional[str or Callable] = None,
-                     force_cpu: bool = False,
-                     ) -> List[DistanceHook]:
-        """ Create list of hooks from names. ::
+    def convert_names(model: nn.Module,
+                      names: str | list[str],
+                      leaf_modules: list[nn.Module],
+                      train_mode: bool
+                      ) -> list[str]:
+        # a helper function
+        if isinstance(names, str):
+            names = [names]
+        tracer_kwargs = {}
+        if leaf_modules is not None:
+            tracer_kwargs['leaf_modules'] = leaf_modules
 
-        >>> hooks1 = DistanceHook.create_hooks(model1, ['name1', ...])
-        >>> hooks2 = DistanceHook.create_hooks(model2, ['name1', ...])
-        >>> with torch.no_grad():
-        >>>    model1(input)
-        >>>    model2(input)
-        >>> [[hook1.distance(hook2) for hook2 in hooks2] for hook1 in hooks1]
+        _names = get_graph_node_names(model, tracer_kwargs=tracer_kwargs)
+        _names = _names[0] if train_mode else _names[1]
+        _names = _names[1:]  # because the first element is input
 
-        Args:
-            model: Model
-            names: List of names of module appeared in `model.named_modules()`
-            distance_func: the method to compute CCA and CKA distance. By default, PWCCA is used.
-            'pwcca', 'svcca', 'lincka' or partial functions such as `partial(pwcca_distance, backend='qr')` are expected.
-            force_cpu: Force computation on CPUs. In some cases, CCA computation is faster on CPUs than on GPUs.
-
-        Returns: List of hooks
-
-        """
-
-        return [DistanceHook(model, name, distance_func, force_cpu) for name in names]
-
-    def distance(self,
-                 other: DistanceHook,
-                 *,
-                 downsample_method: Optional[str] = 'avg_pool',
-                 size: Optional[int] = None,
-                 ) -> float:
-        """ Compute CCA distance between self and other.
-
-        Args:
-            other: Another hook
-            downsample_method: method for downsampling. avg_pool or dft.
-            size: size of the feature map after downsampling
-
-        Returns:
-
-        """
-
-        self_tensor = self.hooked_tensors
-        other_tensor = other.hooked_tensors
-        if not self.force_cpu:
-            # hooked_tensors is CPU tensor, so need to device
-            self_tensor = self_tensor.to(self.device)
-            other_tensor = other_tensor.to(self.device)
-        if self_tensor.size(0) != other_tensor.size(0):
-            raise RuntimeError('0th dimension of hooked tensors are different')
-        if self_tensor.dim() != other_tensor.dim():
-            raise RuntimeError('Dimensions of hooked tensors need to be same, '
-                               f'but got {self_tensor.dim()=} and {other_tensor.dim()=}')
-
-        if self_tensor.dim() == 2:
-            return self.cca_function(self_tensor, other_tensor).item()
+        if names is None:
+            names = _names
         else:
-            if size is None:
-                self_tensor = self_tensor.flatten(2).contiguous()
-                other_tensor = other_tensor.flatten(2).contiguous()
-            else:
-                downsample_method = downsample_method or 'avg_pool'
-                self_tensor = self._downsample_4d(self_tensor, size, downsample_method)
-                other_tensor = self._downsample_4d(other_tensor, size, downsample_method)
-            return torch.stack([self.cca_function(s, o)
-                                for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
-                                ]
-                               ).mean().item()
+            if not (set(names) <= set(_names)):
+                diff = set(names) - set(_names)
+                raise RuntimeError(f'Unknown names: {list(diff)}')
+
+        return names
+
+    def __call__(self,
+                 data
+                 ) -> None:
+        """ Forward pass of models. Used to store intermediate features.
+
+        Args:
+            data: input data to models
+
+        """
+        self._model1_tensors = self.extractor1(data)
+        self._model2_tensors = self.extractor1(data)
+
+    def between(self,
+                name1: str,
+                name2: str,
+                size: int | tuple[int, int] = None,
+                downsample_method: Literal['avg_pool', 'dft'] = 'avg_pool'
+                ) -> torch.Tensor:
+        """ Compute distance between modules corresponding to name1 and name2.
+
+        Args:
+            name1: Name of a module of `model1`
+            name2: Name of a module of `model2`
+            size: Size for downsampling if necessary. If size's type is int, both features of name1 and name2 are
+            reshaped to (size, size). If size's type is tuple[int, int], features are reshaped to (size[0], size[0]) and
+            (size[1], size[1]). If size is None (default), no downsampling is applied.
+            downsample_method: Downsampling method: 'avg_pool' for average pooling and 'dft' for discrete
+            Fourier transform
+
+        Returns: Distance in tensor.
+
+        """
+        tensor1 = self._model1_tensors[name1]
+        tensor2 = self._model2_tensors[name2]
+        if tensor1.dim() not in self._supported_dims:
+            raise RuntimeError(f'Supported dimensions are ={self._supported_dims}, but got {tensor1.dim()}')
+        if tensor2.dim() not in self._supported_dims:
+            raise RuntimeError(f'Supported dimensions are ={self._supported_dims}, but got {tensor2.dim()}')
+
+        if size is not None:
+            if isinstance(size, int):
+                size = (size, size)
+
+            def downsample_if_necessary(input, s):
+                if input.dim() == 4:
+                    input = self._downsample_4d(input, s, downsample_method)
+                return input
+
+            tensor1 = downsample_if_necessary(tensor1, size[0])
+            tensor2 = downsample_if_necessary(tensor2, size[1])
+
+        def reshape_if_4d(input):
+            if input.dim() == 4:
+                # see https://arxiv.org/abs/1706.05806's P5.
+                if name1 == name2:  # same layer comparisons -> Cx(BHW)
+                    input = input.permute(1, 0, 2, 3).flatten(1)
+                else:  # different layer comparisons -> Bx(CHW)
+                    input = input.flatten(1)
+            return input
+
+        tensor1 = reshape_if_4d(tensor1)
+        tensor2 = reshape_if_4d(tensor2)
+
+        return self.distance_func(tensor1, tensor2)
 
     @staticmethod
     def _downsample_4d(input: Tensor,
                        size: int,
-                       backend: str
+                       backend: Literal['avg_pool', 'dft']
                        ) -> Tensor:
-        """ Downsample 4D tensor of BxCxHxD to 3D tensor of {size^2}xBxC
-        """
-
         if input.dim() != 4:
             raise RuntimeError(f'input is expected to be 4D tensor, but got {input.dim()=}.')
 
@@ -408,34 +392,26 @@ class DistanceHook(object):
         b, c, h, w = input.size()
 
         if (size, size) == (h, w):
-            return input.flatten(2).permute(2, 0, 1)
+            return input
 
         if (size, size) > (h, w):
-            raise RuntimeError(f'size is expected to be smaller than h or w, but got {h=}, {w=}.')
+            raise RuntimeError(f'size ({size}) is expected to be smaller than h or w, but got {h=}, {w=}.')
 
         if backend not in ('avg_pool', 'dft'):
             raise RuntimeError(f'backend is expected to be avg_pool or dft, but got {backend=}.')
 
         if backend == 'avg_pool':
-            input = F.adaptive_avg_pool2d(input, (size, size))
+            return F.adaptive_avg_pool2d(input, (size, size))
 
-        else:
-            # almost PyTorch implant of
-            # https://github.com/google/svcca/blob/master/dft_ccas.py
-            if input.size(2) != input.size(3):
-                raise RuntimeError('width and height of input needs to be equal')
-            h = input.size(2)
-            input_fft = _rfft(input, 2, normalized=True, onesided=False)
-            freqs = fftfreq(h, 1 / h, device=input.device)
-            idx = (freqs >= -size / 2) & (freqs < size / 2)
-            # BxCxHxWx2 -> BxCxhxwx2
-            input_fft = input_fft[..., idx, :][..., idx, :, :]
-            input = _irfft(input_fft, 2, normalized=True, onesided=False)
-
-        # BxCxHxW -> (HW)xBxC
-        input = input.flatten(2).permute(2, 0, 1)
+        # almost PyTorch implant of
+        # https://github.com/google/svcca/blob/master/dft_ccas.py
+        if input.size(2) != input.size(3):
+            raise RuntimeError('width and height of input needs to be equal')
+        h = input.size(2)
+        input_fft = _rfft(input, 2, normalized=True, onesided=False)
+        freqs = torch.fft.fftfreq(h, 1 / h, device=input.device)
+        idx = (freqs >= -size / 2) & (freqs < size / 2)
+        # BxCxHxWx2 -> BxCxhxwx2
+        input_fft = input_fft[..., idx, :][..., idx, :, :]
+        input = _irfft(input_fft, 2, normalized=True, onesided=False)
         return input
-
-
-# for backward compatibility
-SimilarityHook = DistanceHook

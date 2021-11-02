@@ -3,7 +3,11 @@ from typing import Callable, List, Optional, Tuple
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = lambda x: x
 
 from .utils import _denormalize, _evaluate, _normalize, ifft_shift, _irfft
 

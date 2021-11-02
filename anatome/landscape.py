@@ -3,7 +3,11 @@ from typing import List, Tuple, Callable
 
 import torch
 from torch import nn, Tensor
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = lambda x: x
 
 from .utils import _evaluate
 

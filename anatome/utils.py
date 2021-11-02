@@ -1,13 +1,9 @@
-from importlib.metadata import version
 from typing import Callable, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
 
 AUTO_CAST = False
-HAS_FFT_MODULE = (version("torch") >= "1.7.0")
-if HAS_FFT_MODULE:
-    import torch.fft
 
 
 def use_auto_cast() -> None:
@@ -94,28 +90,12 @@ def ifft_shift(input: torch.Tensor,
     return torch.roll(input, shift, dims)
 
 
-def fftfreq(window_length: int,
-            sample_spacing: float,
-            *,
-            device: Optional[torch.device] = None,
-            dtype: Optional[torch.dtype] = None
-            ) -> torch.Tensor:
-    val = 1 / (window_length * sample_spacing)
-    results = torch.empty(window_length, dtype=dtype, device=device)
-    n = (window_length - 1) // 2 + 1
-    results[:n] = torch.arange(0, n, dtype=dtype, device=device)
-    results[n:] = torch.arange(-(window_length // 2), 0, dtype=dtype, device=device)
-    return results * val
-
-
 def _rfft(self: Tensor,
           signal_ndim: int,
           normalized: bool = False,
           onesided: bool = True
           ) -> Tensor:
     # old-day's torch.rfft
-    if not HAS_FFT_MODULE:
-        return torch.rfft(self, signal_ndim, normalized, onesided)
 
     if signal_ndim > 4:
         raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")
@@ -131,8 +111,6 @@ def _irfft(self: Tensor,
            onesided: bool = True,
            ) -> Tensor:
     # old-day's torch.irfft
-    if not HAS_FFT_MODULE:
-        return torch.irfft(self, signal_ndim, normalized, onesided)
 
     if signal_ndim > 4:
         raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")

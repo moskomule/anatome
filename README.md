@@ -10,8 +10,8 @@ This project is under active development and the codebase is subject to change.
 
 ```
 Python>=3.9.0
-PyTorch>=1.9.0
-torchvision>=0.10.0
+PyTorch>=1.10
+torchvision>=0.11
 ```
 
 After the installation of PyTorch, install `anatome` as follows:
@@ -35,16 +35,16 @@ methods are implemented.
 ```python
 import torch
 from torchvision.models import resnet18
-from anatome import DistanceHook
+from anatome import Distance
 
-model = resnet18()
-hook1 = DistanceHook(model, "layer3.0.conv1")
-hook2 = DistanceHook(model, "layer3.0.conv2")
-model.eval()
+random_model = resnet18()
+learned_model = resnet18(pretrained=True)
+distance = Distance(random_model, learned_model, method='pwcca')
 with torch.no_grad():
-    model(torch.randn(128, 3, 224, 224))
-# downsampling to (size, size) may be helpful
-hook1.distance(hook2, size=8)
+    distance(torch.randn(256, 3, 224, 224))
+
+# resize if necessary by specifying `size`
+distance.between("layer3.0.conv1", "layer3.0.conv1", size=8)
 ```
 
 ### Loss Landscape Visualization
@@ -52,6 +52,8 @@ hook1.distance(hook2, size=8)
 - [Li et al. NeurIPS2018](https://papers.nips.cc/paper/7875-visualizing-the-loss-landscape-of-neural-nets)
 
 ```python
+from torch.nn import functional as F
+from torchvision.models import resnet18
 from anatome import landscape2d
 
 x, y, z = landscape2d(resnet18(),
@@ -71,6 +73,8 @@ imshow(z)
 - Yin et al. NeurIPS 2019 etc.,
 
 ```python
+from torch.nn import functional as F
+from torchvision.models import resnet18
 from anatome import fourier_map
 
 map = fourier_map(resnet18(),
