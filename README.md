@@ -142,3 +142,12 @@ and the original version:
     year={2020}
 }
 ```
+
+
+# Related libraries:
+
+- The original anatome of course https://github.com/moskomule/anatome
+- https://github.com/AntixK/PyTorch-Model-Compare From the developers "A tiny package to compare two neural networks in PyTorch. There are many ways to compare two neural networks, but one robust and scalable way is using the Centered Kernel Alignment (CKA) metric, where the features of the networks are compared."
+- Captum is trying to add support. Check it out here: https://github.com/pytorch/captum/issues/572#issuecomment-957306989
+- The original svcca tutorials by Maithra et al https://github.com/google/svcca/tree/master/tutorials 
+- if you know more create a pull request and add it here!
