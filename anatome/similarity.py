@@ -438,7 +438,7 @@ class SimilarityHook(object):
                  effective data. This is not recommended unless the user knows how to select a good s in N'=s*D'.
         Returns: returns distance
         """
-        assert (metric_as_sim_or_dist in ['dist', 'sim'])
+        assert (metric_as_sim_or_dist in ['dist', 'sim']), f'Error not valid sim or dist got: {metric_as_sim_or_dist=}'
         self_tensor = self.hooked_tensors
         other_tensor = other.hooked_tensors
         if not self.force_cpu:

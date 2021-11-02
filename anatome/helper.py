@@ -1,6 +1,7 @@
 """
 - helper functions to compute dists/sims for actual networks and experiments
 """
+import math
 from pprint import pprint
 
 import torch
@@ -11,6 +12,35 @@ from torch import nn, Tensor
 
 LayerIdentifier = Union[str, tuple[str]]
 
+def compute_recommended_batch_size_for_trustworthy_experiments_for_model_over_all_layers(mdl: nn.Module) -> int:
+    """
+    Using torch.fx, loop through all the layers and computing the largest B recommnded. Most likely the H*W that is
+    smallest woll win but formally just compute B_l for each layer that your computing sims/dists and then choose
+    the largest B_l. That ceil(B_l) satisfies B*H*W >= s*C for all l since it's the largest.
+
+    :param mdl:
+    :return:
+    """
+    pass
+
+def compute_recommended_batch_size_for_trustworthy_experiments(C: int, H: int, W: int, safety_val: float) -> int:
+    """
+    Based on inequality with safety_val=s:
+        N' >= s*D'
+    the recommended batch size is, assuming N'=B*H*W and D'=C (so considering neurons as filter, patches as data):
+        B*H*W >= s*C
+    leading to any batch size B that satisfies:
+        B >= (s*C)/(H*W)
+    for the current layer and model. So, C, H, W are for the current model at that layer.
+
+    note:
+        - recommended way to compute this is to get the largest B after plugging in the C, H, W for all the layers of
+        your model - essentially computing the "worst-case" B needed for the model.
+    :return:
+    """
+    recommended_batch_size: int = int(math.ceil(safety_val * C / (H * W)))
+    assert(recommended_batch_size > 0), 'Batch size that was recommnded was negative, check the input your using.'
+    return recommended_batch_size
 
 def _clear_hooks(hooks: list):
     for hook in hooks:
