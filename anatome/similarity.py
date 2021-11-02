@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from functools import partial
 from typing import Callable, List, Optional, Tuple, Any
@@ -9,7 +10,10 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 import uutils.torch_uu
-from .utils import _irfft, _rfft, _svd, fftfreq
+from anatome.utils import _irfft, _rfft, _svd, fftfreq
+
+# - safe value for N' = s*D' according to svcca paper and our santiy checks to get trust worthy CCA sims.
+SAFTEY_VAL: int = 10
 
 
 def _check_shape_equal(x: Tensor,
@@ -50,7 +54,7 @@ def cca_by_svd(x: Tensor,
                y: Tensor
                ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using only SVD.
-    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
+    For more details, check Press 1011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
     Args:
         x: input tensor of Shape NxD1
@@ -75,7 +79,7 @@ def cca_by_qr(x: Tensor,
               y: Tensor
               ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using QR and SVD.
-    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
+    For more details, check Press 1011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
     Args:
         x: input tensor of Shape NxD1
@@ -164,7 +168,7 @@ def svcca_distance(x: Tensor,
                    accept_rate: float,
                    backend: str
                    ) -> Tensor:
-    """ Singular Vector CCA proposed in Raghu et al. 2017.
+    """ Singular Vector CCA proposed in Raghu et al. 1017.
 
     Args:
         x: input tensor of Shape NxD1, where it's recommended that N>Di
@@ -187,7 +191,7 @@ def pwcca_distance(x: Tensor,
                    y: Tensor,
                    backend: str
                    ) -> Tensor:
-    """ Projection Weighted CCA proposed in Marcos et al. 2018.
+    """ Projection Weighted CCA proposed in Marcos et al. 1018.
 
     Args:
         x: input tensor of Shape NxD1, where it's recommended that N>Di
@@ -290,7 +294,7 @@ class SimilarityHook(object):
         model.eval()
         with torch.no_grad():
             for _ in range(10):
-                model(torch.randn(120, 3, 224, 224))
+                model(torch.randn(110, 3, 224, 224))
         hook1.distance(hook2, size=8)
 
     Args:
@@ -426,14 +430,15 @@ class SimilarityHook(object):
                 for CNNs.
                 - when subsample_effective_num_data_method is None no subsampling in the data dimension is done.
                 - when subsample_effective_num_data_method is 'subsampling_data_to_dims_ratio' the num data dimension is
-                subsampled such that N'=s*D' defaulting to N'=20*D.
+                subsampled such that N'=s*D' defaulting to N'=10*D.
             :param subsample_effective_num_data_param: the parameter value for the subsampling method for CNNs.
                 - if the subsampling method is by ratio of effective data to effective D then it does N'=s*D'
-                where s=20 is a good default value according to previous work. s = None defaults to s=20.
+                where s=10 is a good default value according to previous work. s = None defaults to s=10.
                 - if subsampling method is by sumple_size then user indicates by how much to downsample the number of
                  effective data. This is not recommended unless the user knows how to select a good s in N'=s*D'.
         Returns: returns distance
         """
+        assert (metric_as_sim_or_dist in ['dist', 'sim'])
         self_tensor = self.hooked_tensors
         other_tensor = other.hooked_tensors
         if not self.force_cpu:
@@ -451,12 +456,12 @@ class SimilarityHook(object):
             # other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor, subsample_effective_num_data_method, subsample_effective_num_data_param)
             return self.cca_function(self_tensor, other_tensor).item()
         else:
-            # -
             if effective_neuron_type == 'original_anatome':
-                # print(f'{effective_neuron_type=}')
+                # - finally compute distance or similarity
                 dist: float = distance_cnn_original_anatome(self, downsample_size, downsample_method, self_tensor,
                                                             other_tensor)
-                return dist
+                metric: float = 1.0 - dist if metric_as_sim_or_dist == 'sim' else dist
+                return metric
             # - process according to ultimate-anatome
             M, C, H, W = self_tensor.size()
 
@@ -476,7 +481,7 @@ class SimilarityHook(object):
                 # [B, C, HW]  -> [HW, B, C]
                 self_tensor = self_tensor.permute(2, 0, 1)
                 other_tensor = other_tensor.permute(2, 0, 1)
-            assert (self_tensor.size() == torch.Size([H*W, M, C]))
+            assert (self_tensor.size() == torch.Size([H * W, M, C]))
             # - invaraint end of this we have [H'W', M, C]
 
             # -- process according to effective neuron type
@@ -503,27 +508,25 @@ class SimilarityHook(object):
             # -- Subsample data dimension
             # - Overall [N', D'] -> [subsample(N'), D'] e.g. [MHW, C] -> [subsample(MHW), C] = [N', D']
             if subsample_effective_num_data_method is not None:
+                old_M: int = self_tensor.size(0)
                 self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor,
                                                                              subsample_effective_num_data_method,
                                                                              subsample_effective_num_data_param)
                 other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor,
                                                                               subsample_effective_num_data_method,
                                                                               subsample_effective_num_data_param)
-                assert (self_tensor.size() == 2), f'We should have a matrix but got: {self_tensor.size()}'
+                assert (self_tensor.dim() == 2), f'We should have a matrix but got: {self_tensor.size()}'
                 new_M: int = self_tensor.size(0)
-                assert (0 < self_tensor.size(0) < M), f'If we are subsampling (which we are since ' \
-                                                      'subsample_effective_num_data_method is not None), then the data' \
-                                                      f'dimension should have decreased, {new_M=} should be ' \
-                                                      f'strictly smaller than {M=} (and positive).'
+                assert (0 < self_tensor.size(0) <= old_M), f'If we are subsampling (which we are since ' \
+                                                           'subsample_effective_num_data_method is not None), then the data' \
+                                                           f'dimension should have decreased, {new_M=} should be ' \
+                                                           f'strictly smaller than {old_M=} (and positive).'
                 # M: int = new_M
 
             # - finally compute distance or similarity
             dist: float = self.cca_function(self_tensor, other_tensor).item()
-            if metric_as_sim_or_dist == 'sim':
-                sim: float = 1.0 - dist
-                return sim
-            else:
-                return dist
+            metric: float = 1.0 - dist if metric_as_sim_or_dist == 'sim' else dist
+            return metric
 
     @staticmethod
     def _downsample_4d(input: Tensor,
@@ -550,6 +553,7 @@ class SimilarityHook(object):
             raise RuntimeError(f'downsample_size is expected to be smaller than h or w, but got {h=}, {w=}.')
 
         if backend not in ('avg_pool', 'dft'):
+            # todo: random sampling would be nice to allow...
             raise RuntimeError(f'backend is expected to be avg_pool or dft, but got {backend=}.')
 
         if backend == 'avg_pool':
@@ -582,15 +586,30 @@ def _subsample_matrix_in_effective_num_data_points(hook: SimilarityHook,
     """
     Subsamples a data matrix by reducing the number of data points.
         [N, D] -> [N', D']
-    Common approach is to have the data matrix we plug in to CCA (of size [N', D']) to satisfy: N' = 20*D' so that
+    Common approach is to have the data matrix we plug in to CCA (of size [N', D']) to satisfy: N' = 10*D' so that
     CCA returns a trustworthy similarity result.
 
     Method exokabation:
     1. correctness: subsample_effective_num_data_method == 'subsampling_data_to_dims_ratio'
-        - we want N'=20*D'=s*D where s=subsample_effective_num_data_param
+        - we want N'=10*D'=s*D where s=subsample_effective_num_data_param
         - but sampling every k via x[::k, :] gives us p = ceil(N/k) ~ N/k data back which will be N'
         - bu we want N' = p ~ N/k = s*D, only unknown is k=subsampling_freq
         - so k = subsampling_freq ~ N/s*D
+        - Note:
+            - note:
+                - that N might be greater than D (N>D), but we want usually want N=10*D so we want N >= 10*D
+                - due to k = sub_freq = floor(N/(s*D)) we will get errors exactly when N < s*D, as desired.
+                - there is no avoiding subsampling layer throwing errors. If you really want to no errors no matter
+                what set subsample_effective_num_data_method == None.
+                - note, there is little point to only checking N' >= s*D' and letting code through. If N' is too large
+                it's very likely worth subsampling anyway, so we choose to always throw an error if N' < s*D' and
+                otherwise it's safe (since N'>=s*D') and in that case we try to shrink it to N' = s*D'.
+                - Thus, the user has to check the data dim N'=BHW vs D'=C  of each layer, especially later layers and
+                choose which value of B to use. Think carefully changing any other value (e.g. H, W, C, kernel size,
+                layer, S, etc. Make sure no to trick yourself/cheat by accident).
+                A generally good value of batch size B is one s.t. BHW >= S*C. So B >=(S*C)/(HW) e.g. for my 5CNN
+                model B >= (10*32)/(5**2) = 12.8
+
     2. correctness: subsample_effective_num_data_method == 'subsampling_size'
         - we want N' = x = subsample_effective_num_data_param given by user.
         - so how much do we need to subsampling if x[::k, :] gives us p = ceil(N/k) ~ N/k data back?
@@ -604,26 +623,39 @@ def _subsample_matrix_in_effective_num_data_points(hook: SimilarityHook,
     """
     from uutils.torch_uu import approx_equal
     assert (
-            data_matrix.size() == 2), f'Input has to be a matrix (2D tensor) but tensor with shape: {data_matrix.size()}'
+            data_matrix.dim() == 2), f'Input has to be a matrix (2D tensor) but tensor with shape: {data_matrix.size()}'
     N, D = data_matrix.size()
     # - Subsample number of data points: [N, D] -> [N', D]
     if subsample_effective_num_data_method is None:
         # - NOP: [N, D] -> [N, D]
         return data_matrix
     elif subsample_effective_num_data_method == 'subsampling_data_to_dims_ratio':
-        # - sample such that [N, D]->[N', D] such that N' satisfies N'= s*D' e.g. N'=20*D', 20 is safe according to
-        # svcca paper/previous work
-        subsample_effective_num_data_param: int = subsample_effective_num_data_param or 20
-        subsampling_freq: int = math.floor(N / (subsample_effective_num_data_param * D))
-        data_matrix: Tensor = data_matrix[::subsampling_freq, :]
+        # - sample such that [N, D]->[N', D] such that N'= s*D' e.g. N'=10*D', 10 is safe according to svcca paper
+        S: int = subsample_effective_num_data_param or SAFTEY_VAL
+        if S < SAFTEY_VAL:
+            logging.warning(f'Safe value for trustworthy sims seems low. Your value {S=} recommended {SAFTEY_VAL=}')
+        assert N >= S * D, f'Subsampling will fail since your data is too small i.e. N < S*D is bad. ' \
+                           f'You have {N=} compared to safe value s*D={S}*{D}={S * D} (N > 10*D is recommended).' \
+                           f'{D=} e.g. if N\'=s*D={S}*{D}={S * D}. ' \
+                           f'Increase your batch size or your model might be pooling to much at higher ' \
+                           f'layers. It\'s not recommended to decrease the safety margin of s=10.'
+        k_subsampling_freq: int = math.floor(N / (S * D))
+        assert (k_subsampling_freq >= 1), f'Subsampling will fail since data is too small you need N\'={N}>={S * D}=S*D' \
+                                          f'Consider increasing batch size or pooling at later layer might be the issue.'
+        data_matrix: Tensor = data_matrix[::k_subsampling_freq, :]
         # - error of 2 is fine
         N_effective: int = data_matrix.size(0)
-        err_msg: str = f'We want the effective number of data to be N\'={subsample_effective_num_data_param}*{D}' \
-                       f'but is N\'={N_effective}'
-        assert (uutils.torch_uu.approx_equal(N_effective, subsample_effective_num_data_param * D, tolerance=2)), err_msg
+        err_msg: str = f'We want the effective number of data to be ' \
+                       f'N\'>={S}*{D}={S * D} after subsampling but it\'s N\'={N_effective}. '
+        # note due to the floor func, the subsampling freq will be slightly higher (so k will be lower), which should
+        # always allow to pass the bellow assertion if things are working. If k=0 then an earlier assert should have caught it.
+        assert (N_effective >= S * D), err_msg
         return data_matrix
     elif subsample_effective_num_data_method == 'subsampling_size':
         # - sample such that [N, D]->[N', D] such that we have N'=subsample_effective_num_data_param, specific number of effective data
+        assert (subsample_effective_num_data_param <= N), 'Trying to extract more data points than present on the data' \
+                                                          f'set: {subsample_effective_num_data_param=} but data set/batch ' \
+                                                          f'is of size {N=}'
         subsampling = math.ceil(N / subsample_effective_num_data_param)
         data_matrix: Tensor = data_matrix[::subsampling, :]
         # - error of 2 is fine
