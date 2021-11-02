@@ -454,7 +454,9 @@ class SimilarityHook(object):
         if self_tensor.dim() == 2:  # - output of FCNN so it's a matrix e.g. [N, D]
             # self_tensor = _subsample_matrix_in_effective_num_data_points(self, self_tensor, subsample_effective_num_data_method, subsample_effective_num_data_param)
             # other_tensor = _subsample_matrix_in_effective_num_data_points(self, other_tensor, subsample_effective_num_data_method, subsample_effective_num_data_param)
-            return self.cca_function(self_tensor, other_tensor).item()
+            dist: float = self.cca_function(self_tensor, other_tensor).item()
+            metric: float = 1.0 - dist if metric_as_sim_or_dist == 'sim' else dist
+            return metric
         else:
             if effective_neuron_type == 'original_anatome':
                 # - finally compute distance or similarity
