@@ -58,6 +58,7 @@ def landscape1d(model: nn.Module,
                 criterion: Callable[[Tensor, Tensor], Tensor],
                 x_range: Tuple[float, float],
                 step_size: float,
+                auto_cast: bool = False
                 ) -> Tuple[Tensor, Tensor]:
     """ Compute loss landscape along a random direction X. The landscape is
 
@@ -79,7 +80,7 @@ def landscape1d(model: nn.Module,
     loss_values = torch.zeros_like(x_coord, device=torch.device('cpu'))
     for i, x in enumerate(tqdm(x_coord.tolist(), ncols=80)):
         new_model = _get_perturbed_model(model, x_direction, x)
-        loss_values[i] = _evaluate(new_model, data, criterion)
+        loss_values[i] = _evaluate(new_model, data, criterion, auto_cast)
     return x_coord, loss_values
 
 
@@ -90,6 +91,7 @@ def landscape2d(model: nn.Module,
                 x_range: Tuple[float, float],
                 y_range: Tuple[float, float],
                 step_size: float or Tuple[float, float],
+                auto_cast: bool = False
                 ) -> Tuple[Tensor, Tensor, Tensor]:
     """  Compute loss landscape along two random directions X and Y. The landscape is
 
@@ -114,7 +116,7 @@ def landscape2d(model: nn.Module,
         step_size = (step_size, step_size)
     x_coord = torch.arange(x_range[0], x_range[1] + step_size[0], step_size[0], dtype=torch.float)
     y_coord = torch.arange(y_range[0], y_range[1] + step_size[1], step_size[1], dtype=torch.float)
-    x_coord, y_coord = torch.meshgrid(x_coord, y_coord)
+    x_coord, y_coord = torch.meshgrid(x_coord, y_coord, indexing='ij')
     shape = x_coord.shape
     x_coord, y_coord = x_coord.flatten(), y_coord.flatten()
     x_direction = _filter_normed_random_direction(model)
@@ -126,5 +128,5 @@ def landscape2d(model: nn.Module,
             y_coord.tolist())
     ):
         new_model = _get_perturbed_model(model, (x_direction, y_direction), (x, y))
-        loss_values[i] = _evaluate(new_model, data, criterion)
+        loss_values[i] = _evaluate(new_model, data, criterion, auto_cast)
     return x_coord.view(shape), y_coord.view(shape), loss_values.view(shape)
