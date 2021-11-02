@@ -7,7 +7,7 @@ from torch import nn, Tensor
 try:
     from tqdm import tqdm
 except ImportError:
-    tqdm = lambda x: x
+    tqdm = lambda x, ncols=None: x
 
 from .utils import _evaluate
 

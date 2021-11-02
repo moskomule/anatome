@@ -7,7 +7,7 @@ from torch.nn import functional as F
 try:
     from tqdm import tqdm
 except ImportError:
-    tqdm = lambda x: x
+    tqdm = lambda x, ncols=None: x
 
 from .utils import _denormalize, _evaluate, _normalize, ifft_shift, _irfft
 

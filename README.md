@@ -4,6 +4,8 @@
 
 This project is under active development and the codebase is subject to change.
 
+**v0.0.5 introduces significant changes to `distance`.**
+
 ## Installation
 
 `anatome` requires
