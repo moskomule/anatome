@@ -12,6 +12,7 @@ from torch import nn, Tensor
 
 LayerIdentifier = Union[str, tuple[str]]
 
+
 def compute_recommended_batch_size_for_trustworthy_experiments_for_neurons_as_activations(mdl: nn.Module) -> int:
     """
 
@@ -33,7 +34,9 @@ def compute_recommended_batch_size_for_trustworthy_experiments_for_neurons_as_ac
     """
     pass
 
-def compute_recommended_batch_size_for_trustworthy_experiments_for_model_over_all_layers_for_neurons_as_filters(mdl: nn.Module) -> int:
+
+def compute_recommended_batch_size_for_trustworthy_experiments_for_model_over_all_layers_for_neurons_as_filters(
+        mdl: nn.Module) -> int:
     """
     Using torch.fx, loop through all the layers and computing the largest B recommnded. Most likely the H*W that is
     smallest woll win but formally just compute B_l for each layer that your computing sims/dists and then choose
@@ -43,6 +46,7 @@ def compute_recommended_batch_size_for_trustworthy_experiments_for_model_over_al
     :return:
     """
     pass
+
 
 def compute_recommended_batch_size_for_trustworthy_experiments(C: int, H: int, W: int, safety_val: float) -> int:
     """
@@ -60,8 +64,9 @@ def compute_recommended_batch_size_for_trustworthy_experiments(C: int, H: int, W
     :return:
     """
     recommended_batch_size: int = int(math.ceil(safety_val * C / (H * W)))
-    assert(recommended_batch_size > 0), 'Batch size that was recommnded was negative, check the input your using.'
+    assert (recommended_batch_size > 0), 'Batch size that was recommnded was negative, check the input your using.'
     return recommended_batch_size
+
 
 def _clear_hooks(hooks: list):
     for hook in hooks:
@@ -242,7 +247,7 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
 
 def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
         distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]]
-    ) -> tuple[OrderedDict[LayerIdentifier, float], OrderedDict[LayerIdentifier, float]]:
+) -> tuple[OrderedDict[LayerIdentifier, float], OrderedDict[LayerIdentifier, float]]:
     """
     [B, L] -> [L] * 2, means and stds
     """
@@ -345,19 +350,19 @@ def dist_per_layer_test():
     subsample_effective_num_data_param: int = 10
     metric_as_sim_or_dist: str = 'sim'
     mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names,
+                                                                            metric_comparison_type=metric_comparison_type,
+                                                                            effective_neuron_type=effective_neuron_type,
+                                                                            subsample_effective_num_data_method=subsample_effective_num_data_method,
+                                                                            subsample_effective_num_data_param=subsample_effective_num_data_param,
+                                                                            metric_as_sim_or_dist=metric_as_sim_or_dist)
+    pprint_results(mus, stds)
+    assert (mus != stds)
+    mu, std = _stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names,
                                          metric_comparison_type=metric_comparison_type,
                                          effective_neuron_type=effective_neuron_type,
                                          subsample_effective_num_data_method=subsample_effective_num_data_method,
                                          subsample_effective_num_data_param=subsample_effective_num_data_param,
                                          metric_as_sim_or_dist=metric_as_sim_or_dist)
-    pprint_results(mus, stds)
-    assert (mus != stds)
-    mu, std = _stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names,
-                                        metric_comparison_type=metric_comparison_type,
-                                        effective_neuron_type=effective_neuron_type,
-                                        subsample_effective_num_data_method=subsample_effective_num_data_method,
-                                        subsample_effective_num_data_param=subsample_effective_num_data_param,
-                                        metric_as_sim_or_dist=metric_as_sim_or_dist)
     print(f'----entire net result: {mu=}, {std=}')
     assert (approx_equal(mu, 1.0))
     mu2, std2 = compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(distances_per_data_sets_per_layer)
@@ -367,20 +372,21 @@ def dist_per_layer_test():
     # -- differnt data different nets dist ~ 1.0, large distance, so low sim
     X1: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
     X2: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
-    mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names, layer_names,
+    mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names,
+                                                                            layer_names,
+                                                                            metric_comparison_type=metric_comparison_type,
+                                                                            effective_neuron_type=effective_neuron_type,
+                                                                            subsample_effective_num_data_method=subsample_effective_num_data_method,
+                                                                            subsample_effective_num_data_param=subsample_effective_num_data_param,
+                                                                            metric_as_sim_or_dist=metric_as_sim_or_dist)
+    pprint_results(mus, stds)
+    assert (mus != stds)
+    mu, std = _stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names,
                                          metric_comparison_type=metric_comparison_type,
                                          effective_neuron_type=effective_neuron_type,
                                          subsample_effective_num_data_method=subsample_effective_num_data_method,
                                          subsample_effective_num_data_param=subsample_effective_num_data_param,
                                          metric_as_sim_or_dist=metric_as_sim_or_dist)
-    pprint_results(mus, stds)
-    assert (mus != stds)
-    mu, std = _stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names,
-                                        metric_comparison_type=metric_comparison_type,
-                                        effective_neuron_type=effective_neuron_type,
-                                        subsample_effective_num_data_method=subsample_effective_num_data_method,
-                                        subsample_effective_num_data_param=subsample_effective_num_data_param,
-                                        metric_as_sim_or_dist=metric_as_sim_or_dist)
     print(f'----entire net result: {mu=}, {std=}')
     assert (approx_equal(mu, 0.0, tolerance=0.4))
     mu2, std2 = compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(distances_per_data_sets_per_layer)
