@@ -43,7 +43,7 @@ random_model = resnet18()
 learned_model = resnet18(pretrained=True)
 distance = Distance(random_model, learned_model, method='pwcca')
 with torch.no_grad():
-    distance(torch.randn(256, 3, 224, 224))
+    distance.forward(torch.randn(256, 3, 224, 224))
 
 # resize if necessary by specifying `size`
 distance.between("layer3.0.conv1", "layer3.0.conv1", size=8)

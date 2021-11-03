@@ -1,8 +1,8 @@
 from setuptools import find_packages, setup
 
 install_requires = [
-    'torch>=1.9.0',
-    'torchvision>=0.10.0',
+    'torch>=1.10.0',
+    'torchvision>=0.11.1',
 ]
 
 setup(

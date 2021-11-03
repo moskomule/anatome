@@ -315,9 +315,9 @@ class Distance(object):
 
         return names
 
-    def __call__(self,
-                 data
-                 ) -> None:
+    def forward(self,
+                data
+                ) -> None:
         """ Forward pass of models. Used to store intermediate features.
 
         Args:
