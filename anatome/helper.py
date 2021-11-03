@@ -12,7 +12,28 @@ from torch import nn, Tensor
 
 LayerIdentifier = Union[str, tuple[str]]
 
-def compute_recommended_batch_size_for_trustworthy_experiments_for_model_over_all_layers(mdl: nn.Module) -> int:
+def compute_recommended_batch_size_for_trustworthy_experiments_for_neurons_as_activations(mdl: nn.Module) -> int:
+    """
+
+    Calculation:
+        Make sure the standard N' >= safety * D' is true. For activations as neurons we get
+            [M, C, H, W] -> [M, CHW]
+        so we need to choose a downsample size such that N' >= s * D' is satisfied. For that we need:
+        M >= s*CHW
+        H=W=size
+        M >= s*C*size^2
+        where usually C, s are decided (e.g. C=32, S=10) and you need to choose a size such that M has
+        enough data examples and the code runs (no OMM issues), the errors/stds are low enough etc.
+        Plug in different size^2 code while the code computing the sims for entire (perhaps with meta-batches)
+        until the OOM issue arises.
+
+        Note: The only way to fix OOM is to fix the hook code or see if torch.fx fixes it.
+    :param mdl:
+    :return:
+    """
+    pass
+
+def compute_recommended_batch_size_for_trustworthy_experiments_for_model_over_all_layers_for_neurons_as_filters(mdl: nn.Module) -> int:
     """
     Using torch.fx, loop through all the layers and computing the largest B recommnded. Most likely the H*W that is
     smallest woll win but formally just compute B_l for each layer that your computing sims/dists and then choose
@@ -101,6 +122,11 @@ def _dists_per_task_per_layer_to_list(dists_per_tasks_per_layer: list[OrderedDic
         _dists_per_tasks_per_layer.append(_dists_per_layer)
     return _dists_per_tasks_per_layer
 
+
+# def _dists_to_tensor():
+#     distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
+#         distances_per_data_sets_per_layer)
+#     distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
 
 def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                             X1: Tensor, X2: Tensor,
@@ -214,58 +240,30 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
     return dists_entire_net_all_data_sets
 
 
-def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
-                             X1: Tensor, X2: Tensor,
-                             layer_names1: list[str], layer_names2: list[str],
-                             metric_comparison_type: str = 'pwcca',
-                             iters: int = 1,
-                             effective_neuron_type: str = 'filter',
-                             downsample_method: Optional[str] = None,
-                             downsample_size: Optional[int] = None,
-                             subsample_effective_num_data_method: Optional[str] = None,
-                             subsample_effective_num_data_param: Optional[int] = None,
-                             metric_as_sim_or_dist: str = 'dist',
-                             force_cpu: bool = False
-                             ) -> tuple[OrderedDict[LayerIdentifier, float]]:
+def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
+        distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]]
+    ) -> tuple[OrderedDict[LayerIdentifier, float], OrderedDict[LayerIdentifier, float]]:
     """
-    Compute the overall stats (mean & std) of distances per layer
-        [B, M, C, H, W] -> [L]*2 (mus, stds) per layer
-    for the given B number of data sets/tasks of size [M, C, H, W].
-
-    Note:
-        - this might be confusing because X1 != X2. The most intuitive case is when X1=X2=X so that we are computing
-        the distance for each task (but the tasks correspond to each other).
-    :return:
+    [B, L] -> [L] * 2, means and stds
     """
     from uutils.torch_uu import tensorify
-    assert len(layer_names1) == len(layer_names2)
-    # - [B, L, 1], get distances per data sets (tasks) per layer
-    distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = dist_batch_data_sets_for_all_layer(
-        mdl1, mdl2, X1, X2,
-        layer_names1, layer_names2,
-        metric_comparison_type=metric_comparison_type,
-        iters=iters,
-        effective_neuron_type=effective_neuron_type,
-        downsample_method=downsample_method,
-        downsample_size=downsample_size,
-        subsample_effective_num_data_method=subsample_effective_num_data_method,
-        subsample_effective_num_data_param=subsample_effective_num_data_param,
-        metric_as_sim_or_dist=metric_as_sim_or_dist,
-        force_cpu=force_cpu
-    )
+    # - get layer ids
     layer_ids: list[LayerIdentifier] = list(distances_per_data_sets_per_layer[0].keys())
-    # list(OrderDict([B, L])) -> list([B, L])
+    layer_names1 = layer_ids
+
+    # -list(OrderDict([B, L])) -> list([B, L])
     distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
         distances_per_data_sets_per_layer)
-    B, L = X1.size(0), len(layer_names1)
     distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
-    assert (distances_per_data_sets_per_layer.size() == torch.Size([B, L]))
-    # - [B, L] -> [L], get the avg distance/sim for each layer (and std)
+    assert (distances_per_data_sets_per_layer.dim() == 2)
+
+    # - [B, L] -> [L] get the avg distance/sim for each layer (and std)
     means_per_layer: Tensor = distances_per_data_sets_per_layer.mean(dim=0)
     stds_per_layer: Tensor = distances_per_data_sets_per_layer.std(dim=0)
     L: int = len(distances_per_data_sets_per_layer[0])
     assert means_per_layer.size() == torch.Size([L])
     assert stds_per_layer.size() == torch.Size([L])
+
     # [L, 1] -> OrderDict([L])
     assert len(layer_ids) == L == len(layer_names1)
     mean_distance_per_layer: OrderedDict[LayerIdentifier, float] = OrderedDict()
@@ -276,55 +274,11 @@ def stats_distance_per_layer(mdl1: nn.Module, mdl2: nn.Module,
         std: float = stds_per_layer[l_idx].item()
         mean_distance_per_layer[layer_id] = mu
         std_distance_per_layer[layer_id] = std
-    return mean_distance_per_layer, std_distance_per_layer, distances_per_data_sets_per_layer
+    return mean_distance_per_layer, std_distance_per_layer
 
-
-def _stats_distance_entire_net(mdl1: nn.Module, mdl2: nn.Module,
-                              X1: Tensor, X2: Tensor,
-                              layer_names1: list[str], layer_names2: list[str],
-                              metric_comparison_type: str = 'pwcca',
-                              iters: int = 1,
-                              effective_neuron_type: str = 'filter',
-                              downsample_method: Optional[str] = None,
-                              downsample_size: Optional[int] = None,
-                              subsample_effective_num_data_method: Optional[str] = None,
-                              subsample_effective_num_data_param: Optional[int] = None,
-                              metric_as_sim_or_dist: str = 'dist',
-                              force_cpu: bool = False
-                              ) -> tuple[float]:
-    """
-    Compute the overall stats of distances per layer.
-    Not recommended, to use. It's better to compute the layerwise metrics and then use the helper function
-    to aggreagate those into a one net result.
-        [B, M, C, H, W] -> pair of [1, 1]
-    :return:
-    """
-    from uutils.torch_uu import tensorify
-    # - [B, L], get distances per data sets (tasks) per layer
-    distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = dist_batch_data_sets_for_all_layer(
-        mdl1, mdl2, X1, X2,
-        layer_names1, layer_names2,
-        metric_comparison_type=metric_comparison_type,
-        iters=iters,
-        effective_neuron_type=effective_neuron_type,
-        downsample_method=downsample_method,
-        downsample_size=downsample_size,
-        subsample_effective_num_data_method=subsample_effective_num_data_method,
-        subsample_effective_num_data_param=subsample_effective_num_data_param,
-        metric_as_sim_or_dist=metric_as_sim_or_dist,
-        force_cpu=force_cpu
-    )
-    # list(OrderDict([B, L])) -> list([B, L])
-    distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
-        distances_per_data_sets_per_layer)
-    distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
-    # - [B, L] -> [], get the avg distance/sim for each layer (and std)
-    mu: Tensor = distances_per_data_sets_per_layer.mean(dim=[0, 1])
-    std: Tensor = distances_per_data_sets_per_layer.std(dim=[0, 1])
-    return mu, std
 
 def compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(
-        distances_per_data_sets_per_layer: Tensor) \
+        distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]]) \
         -> tuple[float, float]:
     """
         [B, L] -> mu, std
@@ -333,11 +287,14 @@ def compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(
     :param distances_per_data_sets_per_layer:
     :return:
     """
+    from uutils.torch_uu import tensorify
+
+    # -list(OrderDict([B, L])) -> list([B, L])
+    distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
+        distances_per_data_sets_per_layer)
+    distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
     assert (distances_per_data_sets_per_layer.dim() == 2)
-    # list(OrderDict([B, L, 1])) -> list([B, L, 1])
-    # _distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
-    #     distances_per_data_sets_per_layer)
-    # _distances_per_data_sets_per_layer: Tensor = tensorify(_distances_per_data_sets_per_layer)
+
     # - [B, L, 1] -> [1], get the avg distance/sim for each layer (and std)
     mu: Tensor = distances_per_data_sets_per_layer.mean(dim=[0, 1])
     std: Tensor = distances_per_data_sets_per_layer.std(dim=[0, 1])
@@ -366,7 +323,7 @@ def dist_per_layer_test():
     import torch.nn as nn
 
     from uutils.torch_uu.models.learner_from_opt_as_few_shot_paper import get_default_learner_from_default_args, \
-        get_feature_extractor_layers
+        get_feature_extractor_conv_layers
     from uutils.torch_uu import approx_equal
 
     # - very simple sanity check
@@ -374,7 +331,7 @@ def dist_per_layer_test():
     # num_out_filters: int = 8
     mdl1: nn.Module = get_default_learner_from_default_args()
     mdl2: nn.Module = deepcopy(mdl1)
-    layer_names = get_feature_extractor_layers()
+    layer_names = get_feature_extractor_conv_layers()
     print(f'{layer_names=}')
 
     # - ends up comparing two matrices of size [B, Dout], on same data, on same model
