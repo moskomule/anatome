@@ -52,7 +52,7 @@ def test_similarity_hook_linear(method):
 
     assert dist.convert_names(model1, None, None, False) == ['0', '1']
     with torch.no_grad():
-        dist(torch.randn(13, 3))
+        dist.forward(torch.randn(13, 3))
 
     dist.between("1", "1")
 
@@ -65,7 +65,7 @@ def test_similarity_hook_conv2d(resize_by):
     dist = distance.Distance(model1, model2, model1_names=['0', '1'], model2_names=['0', '1'], method='lincka')
 
     with torch.no_grad():
-        dist(torch.randn(13, 3, 11, 11))
+        dist.forward(torch.randn(13, 3, 11, 11))
 
     dist.between('1', '1', size=5)
     dist.between('1', '1', size=7)
