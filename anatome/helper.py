@@ -2,6 +2,7 @@
 - helper functions to compute dists/sims for actual networks and experiments
 """
 import math
+from copy import deepcopy
 from pprint import pprint
 
 import torch
@@ -246,8 +247,8 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
 
 
 def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
-        distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]]
-) -> tuple[OrderedDict[LayerIdentifier, float], OrderedDict[LayerIdentifier, float]]:
+        distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]],
+        dist2sim: bool = False) -> tuple[OrderedDict[LayerIdentifier, float], OrderedDict[LayerIdentifier, float]]:
     """
     [B, L] -> [L] * 2, means and stds
     """
@@ -260,6 +261,9 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
     distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
         distances_per_data_sets_per_layer)
     distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
+    if dist2sim:
+        # dist -> sim
+        distances_per_data_sets_per_layer: Tensor = 1.0 - distances_per_data_sets_per_layer
     assert (distances_per_data_sets_per_layer.dim() == 2)
 
     # - [B, L] -> [L] get the avg distance/sim for each layer (and std)
@@ -283,7 +287,7 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
 
 
 def compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(
-        distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]]) \
+        distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]], dist2sim: bool = False) \
         -> tuple[float, float]:
     """
         [B, L] -> mu, std
@@ -298,6 +302,9 @@ def compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(
     distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
         distances_per_data_sets_per_layer)
     distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
+    if dist2sim:
+        # dist -> sim
+        distances_per_data_sets_per_layer: Tensor = 1.0 - distances_per_data_sets_per_layer
     assert (distances_per_data_sets_per_layer.dim() == 2)
 
     # - [B, L, 1] -> [1], get the avg distance/sim for each layer (and std)
@@ -306,6 +313,24 @@ def compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(
     assert (mu.size() == torch.Size([]))
     assert (std.size() == torch.Size([]))
     return mu, std
+
+
+# def metrics2opposite_metrics(metrics_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]])\
+#         -> list[OrderedDict[LayerIdentifier, float]]:
+#     """
+#     Converts sim2dists and dists2sim by doing metric - 1.0 and returning same list[Ordered] object.
+#     :param metrics_per_data_sets_per_layer:
+#     :return:
+#     """
+#     #
+#     new_metrics_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]] = deepcopy(metrics_per_data_sets_per_layer)
+#     for i, order_dict_layer2float in enumerate(metrics_per_data_sets_per_layer):
+#         assert len(new_metrics_per_data_sets_per_layer[i]) == len(metrics_per_data_sets_per_layer[i])
+#         for layer_name, metric in order_dict_layer2float.items():
+#             new_metrics_per_data_sets_per_layer[i][layer_name] = 1.0 - metric
+#             assert len(new_metrics_per_data_sets_per_layer[i]) == len(metrics_per_data_sets_per_layer[i])
+#     assert len(new_metrics_per_data_sets_per_layer) == len(metrics_per_data_sets_per_layer)
+#     return new_metrics_per_data_sets_per_layer
 
 
 def pprint_results(mus: OrderedDict, stds: OrderedDict):
