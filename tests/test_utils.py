@@ -10,23 +10,3 @@ def test_normalize_denormalize():
     output = utils._denormalize(utils._normalize(input, mean, std),
                                 mean, std)
     assert torch.allclose(input, output, atol=1e-4)
-
-#
-# def test_fft_shift():
-#     input = torch.randn(4, 3, 8, 8)
-#     fft = utils.fft_shift(input.rfft(2, normalized=True, onesided=False))
-#     ifft = utils.ifft_shift(fft).irfft(2, normalized=True, onesided=False)
-#     assert torch.allclose(input, ifft, atol=1e-4)
-
-#
-# @pytest.mark.skipif(not utils.HAS_FFT_MODULE and hasattr(torch, "rfft"), reason="")
-# @pytest.mark.parametrize("onesided", [False, True])
-# @pytest.mark.parametrize("normalized", [False, True])
-# @pytest.mark.parametrize("signal_ndim", [2])
-# def test_rfft(signal_ndim, normalized, onesided):
-#     input = torch.randn(4, 3, 8, 8)
-#     assert torch.allclose(torch.rfft(input, signal_ndim, normalized, onesided),
-#                           utils._rfft(input, signal_ndim, normalized, onesided), atol=1e-4)
-#     assert torch.allclose(utils._irfft(utils._rfft(input, signal_ndim, normalized, onesided),
-#                                        signal_ndim, normalized, onesided),
-#                           input, atol=1e-4)

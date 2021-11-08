@@ -3,7 +3,11 @@ from typing import Callable, List, Optional, Tuple
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = lambda x, ncols=None: x
 
 from .utils import _denormalize, _evaluate, _normalize, ifft_shift, _irfft
 
@@ -50,7 +54,8 @@ def fourier_map(model: nn.Module,
                 norm: float,
                 fourier_map_size: Optional[Tuple[int, int]] = None,
                 mean: Optional[List[float] or Tensor] = None,
-                std: Optional[List[float] or Tensor] = None
+                std: Optional[List[float] or Tensor] = None,
+                auto_cast: bool = False
                 ) -> Tensor:
     """
 
@@ -81,7 +86,7 @@ def fourier_map(model: nn.Module,
         noisy_input = add_fourier_noise(u_i, input, norm, fourier_map_size)
         if mean is not None:
             noisy_input = _normalize(noisy_input, _mean, _std)  # to [-1, 1]
-        loss = _evaluate(model, (noisy_input, target), criterion)
+        loss = _evaluate(model, (noisy_input, target), criterion, auto_cast)
         map[u_i[0], u_i[1]] = loss
         map[l_i[0], l_i[1]] = loss
     return map

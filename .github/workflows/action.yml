@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         python: [ '3.9' ]
-        torch: [ 'torch==1.9.0+cpu torchvision==0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html' ]
+        torch: [ 'torch==1.10.0+cpu torchvision==0.11.1+cpu -f https://download.pytorch.org/whl/torch_stable.html' ]
 
     steps:
       - uses: actions/checkout@v2
@@ -23,7 +23,6 @@ jobs:
         run: |
           python -m venv venv
           . venv/bin/activate
-          pip install numpy
           pip install ${{ matrix.torch }}
           pip install -U pytest
           pip install -U .

@@ -36,35 +36,40 @@ def test_opd(matrices):
     i1, i2, i3, i4 = matrices
     distance.orthogonal_procrustes_distance(i1, i1)
     distance.orthogonal_procrustes_distance(i1, i2)
+    distance.orthogonal_procrustes_distance(i1, i3)
     with pytest.raises(ValueError):
         distance.orthogonal_procrustes_distance(i1, i4)
 
 
-def test_similarity_hook_linear():
-    model1 = nn.Linear(3, 3)
-    model2 = nn.Linear(3, 5)
-    hook1 = distance.DistanceHook(model1, '')
-    hook2 = distance.DistanceHook(model2, '')
-    input = torch.randn(13, 3)
-    with torch.no_grad():
-        model1(input)
-        model2(input)
+@pytest.mark.parametrize('method', ['pwcca', 'svcca', 'lincka', 'opd'])
+def test_similarity_hook_linear(method):
+    model1 = nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 4))
+    model2 = nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 4))
+    with pytest.raises(RuntimeError):
+        distance.Distance(model1, model2, method=method, model1_names=['3'])
 
-    hook1.distance(hook2)
+    dist = distance.Distance(model1, model2, method=method)
+
+    assert dist.convert_names(model1, None, None, False) == ['0', '1']
+    with torch.no_grad():
+        dist.forward(torch.randn(13, 3))
+
+    dist.between("1", "1")
 
 
 @pytest.mark.parametrize('resize_by', ['avg_pool', 'dft'])
 def test_similarity_hook_conv2d(resize_by):
-    model1 = nn.Conv2d(3, 3, kernel_size=3)
-    model2 = nn.Conv2d(3, 5, kernel_size=3)
-    hook1 = distance.DistanceHook(model1, '')
-    hook2 = distance.DistanceHook(model2, '')
-    input = torch.randn(13, 3, 11, 11)
+    model1 = nn.Sequential(nn.Conv2d(3, 3, kernel_size=3), nn.Conv2d(3, 4, kernel_size=3))
+    model2 = nn.Sequential(nn.Conv2d(3, 3, kernel_size=3), nn.Conv2d(3, 4, kernel_size=3))
+
+    dist = distance.Distance(model1, model2, model1_names=['0', '1'], model2_names=['0', '1'], method='lincka')
+
     with torch.no_grad():
-        model1(input)
-        model2(input)
+        dist.forward(torch.randn(13, 3, 11, 11))
 
-    hook1.distance(hook2, size=7, downsample_method=resize_by)
-
+    dist.between('1', '1', size=5)
+    dist.between('1', '1', size=7)
     with pytest.raises(RuntimeError):
-        hook1.distance(hook2, size=19, downsample_method=resize_by)
+        dist.between('1', '1', size=8)
+
+    dist.between('0', '1')

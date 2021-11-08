@@ -1,20 +1,8 @@
-from importlib.metadata import version
+import contextlib
 from typing import Callable, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-
-AUTO_CAST = False
-HAS_FFT_MODULE = (version("torch") >= "1.7.0")
-if HAS_FFT_MODULE:
-    import torch.fft
-
-
-def use_auto_cast() -> None:
-    """ Enable AMP autocast.
-    """
-    global AUTO_CAST
-    AUTO_CAST = True
 
 
 def _svd(input: torch.Tensor
@@ -28,10 +16,11 @@ def _svd(input: torch.Tensor
 @torch.no_grad()
 def _evaluate(model: nn.Module,
               data: Tuple[Tensor, Tensor],
-              criterion: Callable[[Tensor, Tensor], Tensor]
+              criterion: Callable[[Tensor, Tensor], Tensor],
+              auto_cast: bool
               ) -> float:
     # evaluate model with given data points using the criterion
-    with torch.cuda.amp.autocast(AUTO_CAST):
+    with (torch.cuda.amp.autocast() if auto_cast and torch.cuda.is_available() else contextlib.nullcontext()):
         input, target = data
         return criterion(model(input), target).item()
 
@@ -69,10 +58,7 @@ def fft_shift(input: torch.Tensor,
 
     """
 
-    if dims is None:
-        dims = [i for i in range(1 if input.dim() == 4 else 2, input.dim() - 1)]  # H, W
-    shift = [input.size(dim) // 2 for dim in dims]
-    return torch.roll(input, shift, dims)
+    return torch.fft.fftshift(input, dims)
 
 
 def ifft_shift(input: torch.Tensor,
@@ -88,24 +74,7 @@ def ifft_shift(input: torch.Tensor,
 
     """
 
-    if dims is None:
-        dims = [i for i in range(input.dim() - 2, 0 if input.dim() == 4 else 1, -1)]  # H, W
-    shift = [-input.size(dim) // 2 for dim in dims]
-    return torch.roll(input, shift, dims)
-
-
-def fftfreq(window_length: int,
-            sample_spacing: float,
-            *,
-            device: Optional[torch.device] = None,
-            dtype: Optional[torch.dtype] = None
-            ) -> torch.Tensor:
-    val = 1 / (window_length * sample_spacing)
-    results = torch.empty(window_length, dtype=dtype, device=device)
-    n = (window_length - 1) // 2 + 1
-    results[:n] = torch.arange(0, n, dtype=dtype, device=device)
-    results[n:] = torch.arange(-(window_length // 2), 0, dtype=dtype, device=device)
-    return results * val
+    return torch.fft.ifftshift(input, dims)
 
 
 def _rfft(self: Tensor,
@@ -114,8 +83,6 @@ def _rfft(self: Tensor,
           onesided: bool = True
           ) -> Tensor:
     # old-day's torch.rfft
-    if not HAS_FFT_MODULE:
-        return torch.rfft(self, signal_ndim, normalized, onesided)
 
     if signal_ndim > 4:
         raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")
@@ -131,8 +98,6 @@ def _irfft(self: Tensor,
            onesided: bool = True,
            ) -> Tensor:
     # old-day's torch.irfft
-    if not HAS_FFT_MODULE:
-        return torch.irfft(self, signal_ndim, normalized, onesided)
 
     if signal_ndim > 4:
         raise RuntimeError("signal_ndim is expected to be 1, 2, 3.")
