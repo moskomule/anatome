@@ -13,6 +13,8 @@ import uutils.torch_uu
 from anatome.utils import _irfft, _rfft, _svd, fftfreq
 
 # - safe value for N' = s*D' according to svcca paper and our santiy checks to get trust worthy CCA sims.
+from uutils import torch_uu
+
 SAFTEY_VAL: int = 10
 
 
@@ -56,6 +58,14 @@ def cca_by_svd(x: Tensor,
     """ CCA using only SVD.
     For more details, check Press 1011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
+    Notes:
+        - \tilde a = Sig_X**1/2 a, \tilde b = Sig_X**1/2 b
+        - M = sig_X**-1/2 Sig_X,Y Sig_Y**-1/2
+        - lambda_k = EigVal(M^T M)
+        - sig_k = LeftSingVal(M) = RightSingVal(M) = lambda_k**0.5
+        - cca corr:
+            - rho_k = corr(a_k, b_k) = lambda_k**0.5 = sig_k
+                - for kth cca value
     Args:
         x: input tensor of Shape NxD1
         y: input tensor of shape NxD2
@@ -168,7 +178,7 @@ def svcca_distance(x: Tensor,
                    accept_rate: float,
                    backend: str
                    ) -> Tensor:
-    """ Singular Vector CCA proposed in Raghu et al. 1017.
+    """ Singular Vector CCA proposed in Raghu et al. 2017.
 
     Args:
         x: input tensor of Shape NxD1, where it's recommended that N>Di
@@ -185,7 +195,7 @@ def svcca_distance(x: Tensor,
     div = min(x.size(1), y.size(1))
     a, b, diag = cca(x, y, backend)
     return 1 - diag.sum() / div
-
+    # return diag
 
 def pwcca_distance(x: Tensor,
                    y: Tensor,
@@ -778,3 +788,86 @@ def distance_cnn_original_anatome(self: DistanceHook, size: Optional[int],
                         for s, o in zip(self_tensor.unbind(), other_tensor.unbind())
                         ]
                        ).mean().item()
+
+def _compute_cca_traditional_equation(acts1, acts2,
+                                      epsilon=0., threshold=0.98):
+    """
+    Compute cca values according to standard equation (no tricks):
+        cca_k = sig_k = sqrt{lambda_k} = sqrt{EigVal(M^T M)} = Left or Right SingVal(M)
+        M = sig_X**-1/2 Sig_X,Y Sig_Y**-1/2
+
+    Notes:
+        - \tilde a = Sig_X**1/2 a, \tilde b = Sig_X**1/2 b
+        - M = sig_X**-1/2 Sig_X,Y Sig_Y**-1/2
+        - lambda_k = EigVal(M^T M)
+        - sig_k = LeftSingVal(M) = RightSingVal(M) = lambda_k**0.5
+        - cca corr:
+            - rho_k = corr(a_k, b_k) = lambda_k**0.5 = sig_k
+                - for kth cca value
+    :return:
+    """
+    # - compute covariance matrices
+    # compute covariance with numpy function for extra stability
+    numx = acts1.shape[0]
+    numy = acts2.shape[0]
+
+    # covariance = np.cov(acts1, acts2)
+    # covariance = torch.cov(acts1, acts2)
+    covariance = torch_uu.cov(acts1, acts2)
+    sigma_xx = covariance[:numx, :numx]
+    sigma_xy = covariance[:numx, numx:]
+    sigma_yx = covariance[numx:, :numx]
+    sigma_yy = covariance[numx:, numx:]
+
+    # rescale covariance to make cca computation more stable
+    xmax = torch.max(torch.abs(sigma_xx))
+    ymax = torch.max(torch.abs(sigma_yy))
+    sigma_xx /= xmax
+    sigma_yy /= ymax
+    sigma_xy /= torch.sqrt(xmax * ymax)
+    sigma_yx /= torch.sqrt(xmax * ymax)
+
+
+    # - compute_ccas
+    # (sigma_xx, sigma_xy, sigma_yx, sigma_yy,
+    #  x_idxs, y_idxs) = remove_small(sigma_xx, sigma_xy, sigma_yx, sigma_yy, epsilon)
+
+    numx = sigma_xx.shape[0]
+    numy = sigma_yy.shape[0]
+
+    # if numx == 0 or numy == 0:
+    #     return ([0, 0, 0], [0, 0, 0], np.zeros_like(sigma_xx),
+    #             np.zeros_like(sigma_yy), x_idxs, y_idxs)
+
+    sigma_xx += epsilon * torch.eye(numx)
+    sigma_yy += epsilon * torch.eye(numy)
+    inv_xx = torch.linalg.pinv(sigma_xx)
+    inv_yy = torch.linalg.pinv(sigma_yy)
+
+    invsqrt_xx = _positive_def_matrix_sqrt(inv_xx)
+    invsqrt_yy = _positive_def_matrix_sqrt(inv_yy)
+
+    arr = torch.dot(invsqrt_xx, torch.dot(sigma_xy, invsqrt_yy))
+
+    u, s, v = torch.linalg.svd(arr)
+
+    # return [u, np.abs(s), v], invsqrt_xx, invsqrt_yy, x_idxs, y_idxs
+    # ([u, s, v], invsqrt_xx, invsqrt_yy,i dx_idxs, y_idxs)
+
+    return s
+
+def _positive_def_matrix_sqrt(array):
+  """Stable method for computing matrix square roots, supports complex matrices.
+
+  Args:
+            array: A numpy 2d array, can be complex valued that is a positive
+                   definite symmetric (or hermitian) matrix
+
+  Returns:
+            sqrtarray: The matrix square root of array
+  """
+  w, v = torch.linalg.eigh(array)
+  #  A - np.dot(v, np.dot(np.diag(w), v.T))
+  wsqrt = torch.sqrt(w)
+  sqrtarray = torch.dot(v, torch.dot(torch.diag(wsqrt), torch.conj(v).T))
+  return sqrtarray
