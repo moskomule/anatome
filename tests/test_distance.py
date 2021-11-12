@@ -10,6 +10,17 @@ def matrices():
     return torch.randn(10, 5), torch.randn(10, 8), torch.randn(10, 20), torch.randn(8, 5)
 
 
+@pytest.fixture
+def matrices2():
+    return torch.randn(10, 5), torch.randn(10, 5)
+
+
+def test_cca_consistency(matrices2):
+    cca_svd = distance.cca_by_svd(*matrices2)
+    cca_qr = distance.cca_by_qr(*matrices2)
+    assert torch.testing.assert_close(cca_svd, cca_qr)
+
+
 def test_cca_shape(matrices):
     i1, i2, i3, i4 = matrices
     distance.cca(i1, i1, 'svd')
