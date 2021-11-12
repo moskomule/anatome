@@ -44,8 +44,9 @@ def cca_by_svd(x: Tensor,
     u_2, s_2, v_2 = _svd(y)
     uu = u_1.t() @ u_2
     u, diag, v = _svd(uu)
-    a = v_1 @ (1 / s_1).diag() @ u
-    b = v_2 @ (1 / s_2).diag() @ v
+    # a @ (1 / s_1).diag() @ u, without creating s_1.diag()
+    a = v_1 @ (1 / s_1 * u)
+    b = v_2 @ (1 / s_2 * v)
     return a, b, diag
 
 
@@ -67,8 +68,9 @@ def cca_by_qr(x: Tensor,
     q_2, r_2 = torch.linalg.qr(y)
     qq = q_1.t() @ q_2
     u, diag, v = _svd(qq)
-    a = r_1.inverse() @ u
-    b = r_2.inverse() @ v
+    # a = r_1.inverse() @ u, but it is faster and more numerically stable
+    a = torch.linalg.solve(r_1, u)
+    b = torch.linalg.solve(r_2, v)
     return a, b, diag
 
 
