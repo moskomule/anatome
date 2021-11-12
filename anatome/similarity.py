@@ -256,8 +256,7 @@ def svcca_distance_keeping_fixed_dims(x: Tensor,
 
     Returns:
     """
-    # x = _divide_by_max(_zero_mean(x, dim=0))
-    # y = _divide_by_max(_zero_mean(y, dim=0))
+    # - doesn't seem to matter as long as cca centers
     x = _zero_mean(x, dim=0)
     y = _zero_mean(y, dim=0)
 
