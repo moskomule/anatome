@@ -52,20 +52,31 @@ def _matrix_normalize(input: Tensor,
     return X_star
 
 
-def cca_by_svd(x: Tensor,
-               y: Tensor
-               ) -> Tuple[Tensor, Tensor, Tensor]:
-    """ CCA using only SVD.
-    For more details, check Press 1011 "Canonical Correlation Clarified by Singular Value Decomposition"
+def _divide_by_max(input: Tensor
+                   ) -> Tensor:
+    """
 
-    Notes:
-        - \tilde a = Sig_X**1/2 a, \tilde b = Sig_X**1/2 b
-        - M = sig_X**-1/2 Sig_X,Y Sig_Y**-1/2
-        - lambda_k = EigVal(M^T M)
-        - sig_k = LeftSingVal(M) = RightSingVal(M) = lambda_k**0.5
-        - cca corr:
-            - rho_k = corr(a_k, b_k) = lambda_k**0.5 = sig_k
-                - for kth cca value
+    Note:
+        - original svcca code does this:
+      # rescale covariance to make cca computation more stable
+      xmax = np.max(np.abs(sigmaxx))
+      ymax = np.max(np.abs(sigmayy))
+      sigmaxx /= xmax
+      sigmayy /= ymax
+      sigmaxy /= np.sqrt(xmax * ymax)
+      sigmayx /= np.sqrt(xmax * ymax)
+    """
+    return input / input.abs().max()
+
+
+def _cca_by_svd(x: Tensor,
+                y: Tensor
+                ) -> Tuple[Tensor, Tensor, Tensor]:
+    """ CCA using only SVD.
+    For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition".
+    This function assumes you've already preprocessed the matrices x and y appropriately. e.g. by centering and
+    dividing by max value.
+
     Args:
         x: input tensor of Shape NxD1
         y: input tensor of shape NxD2
@@ -78,6 +89,7 @@ def cca_by_svd(x: Tensor,
     u_1, s_1, v_1 = _svd(x)
     u_2, s_2, v_2 = _svd(y)
     uu = u_1.t() @ u_2
+    # - see page 4 for correctness of this step
     u, diag, v = _svd(uu)
     # v @ s.diag() = v * s.view(-1, 1), but much faster
     a = (v_1 * s_1.reciprocal_().unsqueeze_(0)) @ u
@@ -85,11 +97,13 @@ def cca_by_svd(x: Tensor,
     return a, b, diag
 
 
-def cca_by_qr(x: Tensor,
-              y: Tensor
-              ) -> Tuple[Tensor, Tensor, Tensor]:
+def _cca_by_qr(x: Tensor,
+               y: Tensor
+               ) -> Tuple[Tensor, Tensor, Tensor]:
     """ CCA using QR and SVD.
     For more details, check Press 1011 "Canonical Correlation Clarified by Singular Value Decomposition"
+    This function assumes you've already preprocessed the matrices x and y appropriately. e.g. by centering and
+    dividing by max value.
 
     Args:
         x: input tensor of Shape NxD1
@@ -141,11 +155,11 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    # x = _matrix_normalize(x, dim=0)
-    # y = _matrix_normalize(y, dim=0)
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
-    return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
+    # x = _zero_mean(x, dim=0)
+    # y = _zero_mean(y, dim=0)
+    x = _divide_by_max(_zero_mean(x, dim=0))
+    y = _divide_by_max(_zero_mean(y, dim=0))
+    return _cca_by_svd(x, y) if backend == 'svd' else _cca_by_qr(x, y)
 
 
 def _svd_reduction(input: Tensor,
@@ -173,6 +187,34 @@ def _svd_reduction(input: Tensor,
     return input @ right[:, : num]
 
 
+def _svd_reduction_keeping_fixed_dims(input: Tensor, num: int) -> Tensor:
+    """
+    Outputs the SV part of SVCCA, removing a fixed number of SVD simensions.
+
+    input @ right[:, : num] == left[:, :num] @ (diag[:num] * torch.eye(num, dtype=input.dtype))
+    since SVD gives orthogonal matrices and we are just canceling out the (V) right part...
+    """
+    left, diag, right = _svd(input)
+    # full = diag.abs().sum()
+    # ratio = diag.abs().cumsum(dim=0) / full
+    # num = torch.where(ratio < accept_rate,
+    #                   input.new_ones(1, dtype=torch.long),
+    #                   input.new_zeros(1, dtype=torch.long)
+    #                   ).sum()
+    return input @ right[:, : num]
+
+
+def _svd_reduction_keeping_fixed_dims_using_V(input: Tensor, num: int) -> Tensor:
+    """
+    Outputs the SV part of SVCCA, removing a fixed number of SVD simensions.
+    """
+    left, diag, right = _svd(input)
+    # svx = np.dot(sx[:dims_to_keep] * np.eye(dims_to_keep), Vx[:dims_to_keep])
+    # - want [N, num]
+    sv_input = left[:, :num] @ (diag[:num] * torch.eye(num, dtype=input.dtype))
+    return sv_input
+
+
 def svcca_distance(x: Tensor,
                    y: Tensor,
                    accept_rate: float,
@@ -196,6 +238,47 @@ def svcca_distance(x: Tensor,
     a, b, diag = cca(x, y, backend)
     return 1 - diag.sum() / div
     # return diag
+
+
+def svcca_distance_keeping_fixed_dims(x: Tensor,
+                                      y: Tensor,
+                                      num: int,
+                                      backend: str,
+                                      reduce_backend: str
+                                      ) -> Tensor:
+    """ Singular Vector CCA proposed in Raghu et al. 2017. but using fixed number of keeping dims.
+
+    Args:
+        x: input tensor of Shape NxD1, where it's recommended that N>Di
+        y: input tensor of Shape NxD2, where it's recommended that N>Di
+        num: fixed number of singular values to keep.
+        backend: svd or qr
+
+    Returns:
+    """
+    # x = _divide_by_max(_zero_mean(x, dim=0))
+    # y = _divide_by_max(_zero_mean(y, dim=0))
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
+
+    # left, diag, right = _svd(input)
+    # sv_input = left[:, :num] @ (diag[:num] * torch.eye(num, dtype=input.dtype))
+    if reduce_backend == 'original_anatome':
+        x = _svd_reduction_keeping_fixed_dims(x, num)
+        y = _svd_reduction_keeping_fixed_dims(y, num)
+    elif reduce_backend == 'original_svcca':
+        x = _svd_reduction_keeping_fixed_dims_using_V(x, num)
+        y = _svd_reduction_keeping_fixed_dims_using_V(y, num)
+    else:
+        raise ValueError(f'Not implemented {reduce_backend=}')
+    a, b, diag = cca(x, y, backend)
+    # div = min(x.size(1), y.size(1))
+    # return 1 - diag.sum() / div
+    # return 1 - diag.sum() / div
+    # return diag
+    assert diag.size() == torch.Size([num])
+    return 1.0 - diag.mean()
+
 
 def pwcca_distance(x: Tensor,
                    y: Tensor,
@@ -789,6 +872,7 @@ def distance_cnn_original_anatome(self: DistanceHook, size: Optional[int],
                         ]
                        ).mean().item()
 
+
 def _compute_cca_traditional_equation(acts1, acts2,
                                       epsilon=0., threshold=0.98):
     """
@@ -827,7 +911,6 @@ def _compute_cca_traditional_equation(acts1, acts2,
     sigma_xy /= torch.sqrt(xmax * ymax)
     sigma_yx /= torch.sqrt(xmax * ymax)
 
-
     # - compute_ccas
     # (sigma_xx, sigma_xy, sigma_yx, sigma_yy,
     #  x_idxs, y_idxs) = remove_small(sigma_xx, sigma_xy, sigma_yx, sigma_yy, epsilon)
@@ -847,7 +930,8 @@ def _compute_cca_traditional_equation(acts1, acts2,
     invsqrt_xx = _positive_def_matrix_sqrt(inv_xx)
     invsqrt_yy = _positive_def_matrix_sqrt(inv_yy)
 
-    arr = torch.dot(invsqrt_xx, torch.dot(sigma_xy, invsqrt_yy))
+    # arr = torch.dot(invsqrt_xx, torch.dot(sigma_xy, invsqrt_yy))
+    arr = invsqrt_xx @ (sigma_xy @ invsqrt_yy)
 
     u, s, v = torch.linalg.svd(arr)
 
@@ -856,18 +940,20 @@ def _compute_cca_traditional_equation(acts1, acts2,
 
     return s
 
+
 def _positive_def_matrix_sqrt(array):
-  """Stable method for computing matrix square roots, supports complex matrices.
+    """Stable method for computing matrix square roots, supports complex matrices.
 
-  Args:
-            array: A numpy 2d array, can be complex valued that is a positive
-                   definite symmetric (or hermitian) matrix
+    Args:
+              array: A numpy 2d array, can be complex valued that is a positive
+                     definite symmetric (or hermitian) matrix
 
-  Returns:
-            sqrtarray: The matrix square root of array
-  """
-  w, v = torch.linalg.eigh(array)
-  #  A - np.dot(v, np.dot(np.diag(w), v.T))
-  wsqrt = torch.sqrt(w)
-  sqrtarray = torch.dot(v, torch.dot(torch.diag(wsqrt), torch.conj(v).T))
-  return sqrtarray
+    Returns:
+              sqrtarray: The matrix square root of array
+    """
+    w, v = torch.linalg.eigh(array)
+    #  A - np.dot(v, np.dot(np.diag(w), v.T))
+    wsqrt = torch.sqrt(w)
+    # sqrtarray = torch.dot(v, torch.dot(torch.diag(wsqrt), torch.conj(v).T))
+    sqrtarray = v @ (torch.diag(wsqrt) @ torch.conj(v).T)
+    return sqrtarray
