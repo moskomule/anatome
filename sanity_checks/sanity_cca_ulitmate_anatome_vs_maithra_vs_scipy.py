@@ -7,18 +7,35 @@ conda install pytorch torchvision torchaudio -c pytorch
 conda install pytorch torchvision torchaudio -c pytorch==1.10
 """
 #%%
+import sys
+from pprint import pprint
+
 import torch
 from matplotlib import pyplot as plt
 
 from uutils.torch_uu.metrics.cca import cca_core
 
 from torch import Tensor
-from anatome.similarity import svcca_distance, cca_by_svd, cca_by_qr, _compute_cca_traditional_equation
+# from anatome.similarity import svcca_distance, cca_by_svd, cca_by_qr, _compute_cca_traditional_equation
+from anatome.distance import svcca_distance, cca_by_svd, cca_by_qr
 import numpy as np
 import random
 np.random.seed(0)
 torch.manual_seed(0)
 random.seed(0)
+
+# - checking anatome being uses
+print('-- anatome being used --')
+import os
+os.system('pip list | grep anatome')
+import anatome
+print(f'{anatome=}')
+pprint(f'{sys.path=}')
+# print(f'{anatome.__version__=}')
+# import subprocess
+# print(subprocess.check_output(['ls', '-l']))
+
+print('\n-- start cca test --')
 
 
 # tutorial shapes (500, 10000) (500, 10000) based on MNIST with 500 neurons from a FCNN
