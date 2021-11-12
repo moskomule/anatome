@@ -44,9 +44,8 @@ def cca_by_svd(x: Tensor,
     u_2, s_2, v_2 = _svd(y)
     uu = u_1.t() @ u_2
     u, diag, v = _svd(uu)
-    # v @ s.diag() = v * s.view(-1, 1), but much faster
-    a = (v_1 * s_1.reciprocal_().unsqueeze_(0)) @ u
-    b = (v_2 * s_2.reciprocal_().unsqueeze_(0)) @ v
+    a = v_1 @ s_1.diag() @ u
+    b = v_2 @ s_2.diag() @ v
     return a, b, diag
 
 
