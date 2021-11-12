@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from copy import deepcopy
-from typing import List, Tuple, Callable
+from typing import Callable
 
 import torch
 from torch import nn, Tensor
@@ -15,7 +17,7 @@ EPS = 1e-8
 
 
 def _filter_normed_random_direction(model: nn.Module
-                                    ) -> List[Tensor]:
+                                    ) -> list[Tensor]:
     # applies filter normalization proposed in Li+2018
     def _filter_norm(dirs: Tensor,
                      params: Tensor
@@ -31,8 +33,8 @@ def _filter_normed_random_direction(model: nn.Module
 
 
 def _get_perturbed_model(model: nn.Module,
-                         direction: List[Tensor] or Tuple[List[Tensor], List[Tensor]],
-                         step_size: float or Tuple[float, float]
+                         direction: list[Tensor] or tuple[list[Tensor], list[Tensor]],
+                         step_size: float or tuple[float, float]
                          ) -> nn.Module:
     # perturb the weight of model along direction with step size
     new_model = deepcopy(model)
@@ -54,12 +56,12 @@ def _get_perturbed_model(model: nn.Module,
 
 @torch.no_grad()
 def landscape1d(model: nn.Module,
-                data: Tuple[Tensor, Tensor],
+                data: tuple[Tensor, Tensor],
                 criterion: Callable[[Tensor, Tensor], Tensor],
-                x_range: Tuple[float, float],
+                x_range: tuple[float, float],
                 step_size: float,
                 auto_cast: bool = False
-                ) -> Tuple[Tensor, Tensor]:
+                ) -> tuple[Tensor, Tensor]:
     """ Compute loss landscape along a random direction X. The landscape is
 
     [{criterion(input, target) at Θ+iX} for i in range(x_min, x_max, α)]
@@ -86,13 +88,13 @@ def landscape1d(model: nn.Module,
 
 @torch.no_grad()
 def landscape2d(model: nn.Module,
-                data: Tuple[Tensor, Tensor],
+                data: tuple[Tensor, Tensor],
                 criterion: Callable[[Tensor, Tensor], Tensor],
-                x_range: Tuple[float, float],
-                y_range: Tuple[float, float],
-                step_size: float or Tuple[float, float],
+                x_range: tuple[float, float],
+                y_range: tuple[float, float],
+                step_size: float or tuple[float, float],
                 auto_cast: bool = False
-                ) -> Tuple[Tensor, Tensor, Tensor]:
+                ) -> tuple[Tensor, Tensor, Tensor]:
     """  Compute loss landscape along two random directions X and Y. The landscape is
 
     [

@@ -50,8 +50,8 @@ def cca_by_svd(x: Tensor,
     uu = u_1.t() @ u_2
     u, diag, v = _svd(uu)
     # a @ (1 / s_1).diag() @ u, without creating s_1.diag()
-    a = v_1 @ (1 / s_1 * u)
-    b = v_2 @ (1 / s_2 * v)
+    a = v_1 @ (1 / s_1[:, None] * u)
+    b = v_2 @ (1 / s_2[:, None] * v)
     return a, b, diag
 
 
