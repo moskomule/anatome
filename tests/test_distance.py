@@ -21,9 +21,9 @@ def matrices2():
 def test_cca_consistency(matrices2):
     cca_svd = distance.cca_by_svd(*matrices2)
     cca_qr = distance.cca_by_qr(*matrices2)
-    assert torch.testing.assert_close(cca_svd[0].abs(), cca_qr[0].abs()), f"a: {cca_svd[0]}!={cca_qr[0]}"
-    assert torch.testing.assert_close(cca_svd[1].abs(), cca_qr[1].abs()), f"b: {cca_svd[1]}!={cca_qr[1]}"
-    assert torch.testing.assert_close(cca_svd[2], cca_qr[2]), f"diag: {cca_svd[2]}!={cca_qr[2]}"
+    assert torch.testing.assert_allclose(cca_svd[0].abs(), cca_qr[0].abs()), f"a: {cca_svd[0].abs()}!={cca_qr[0].abs()}"
+    assert torch.testing.assert_allclose(cca_svd[1].abs(), cca_qr[1].abs()), f"b: {cca_svd[1].abs()}!={cca_qr[1].abs()}"
+    assert torch.testing.assert_allclose(cca_svd[2], cca_qr[2]), f"diag: {cca_svd[2].abs()}!={cca_qr[2].abs()}"
 
 
 def test_cca_shape(matrices):
