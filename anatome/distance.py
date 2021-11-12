@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Callable, Tuple, Literal
+from typing import Callable, Literal
 
 import torch
 from torch import Tensor, nn
@@ -17,6 +17,11 @@ def _zero_mean(input: Tensor,
     return input - input.mean(dim=dim, keepdim=True)
 
 
+def _divide_by_max(input: Tensor
+                   ) -> Tensor:
+    return input / input.abs().max()
+
+
 def _check_shape_equal(x: Tensor,
                        y: Tensor,
                        dim: int
@@ -27,7 +32,7 @@ def _check_shape_equal(x: Tensor,
 
 def cca_by_svd(x: Tensor,
                y: Tensor
-               ) -> Tuple[Tensor, Tensor, Tensor]:
+               ) -> tuple[Tensor, Tensor, Tensor]:
     """ CCA using only SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
@@ -52,7 +57,7 @@ def cca_by_svd(x: Tensor,
 
 def cca_by_qr(x: Tensor,
               y: Tensor
-              ) -> Tuple[Tensor, Tensor, Tensor]:
+              ) -> tuple[Tensor, Tensor, Tensor]:
     """ CCA using QR and SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
@@ -77,7 +82,7 @@ def cca_by_qr(x: Tensor,
 def cca(x: Tensor,
         y: Tensor,
         backend: str
-        ) -> Tuple[Tensor, Tensor, Tensor]:
+        ) -> tuple[Tensor, Tensor, Tensor]:
     """ Compute CCA, Canonical Correlation Analysis
 
     Args:
@@ -100,8 +105,8 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
+    x = _divide_by_max(_zero_mean(x, dim=0))
+    y = _divide_by_max(_zero_mean(y, dim=0))
     return cca_by_svd(x, y) if backend == 'svd' else cca_by_qr(x, y)
 
 
@@ -192,8 +197,8 @@ def linear_cka_distance(x: Tensor,
 
     _check_shape_equal(x, y, 0)
 
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
+    x = _divide_by_max(_zero_mean(x, dim=0))
+    y = _divide_by_max(_zero_mean(y, dim=0))
     dot_prod = (y.t() @ x).norm('fro').pow(2)
     norm_x = (x.t() @ x).norm('fro')
     norm_y = (y.t() @ y).norm('fro')
@@ -228,9 +233,9 @@ def orthogonal_procrustes_distance(x: Tensor,
     frobenius_norm = partial(torch.linalg.norm, ord="fro")
     nuclear_norm = partial(torch.linalg.norm, ord="nuc")
 
-    x = _zero_mean(x, dim=0)
+    x = _divide_by_max(_zero_mean(x, dim=0))
     x /= frobenius_norm(x)
-    y = _zero_mean(y, dim=0)
+    y = _divide_by_max(_zero_mean(y, dim=0))
     y /= frobenius_norm(y)
     # frobenius_norm(x) = 1, frobenius_norm(y) = 1
     # 0.5*d_proc(x, y)
