@@ -12,7 +12,10 @@ def matrices():
 
 @pytest.fixture
 def matrices2():
-    return torch.randn(10, 5), torch.randn(10, 5)
+    x, y = torch.randn(10, 5), torch.randn(10, 5)
+    x = distance._zero_mean(x, 0)
+    y = distance._zero_mean(y, 0)
+    return x, y
 
 
 def test_cca_consistency(matrices2):
