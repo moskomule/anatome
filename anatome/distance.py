@@ -45,7 +45,7 @@ def cca_by_svd(x: Tensor,
     uu = u_1.t() @ u_2
     u, diag, v = _svd(uu)
     a = v_1 @ (1 / s_1).diag() @ u
-    b = v_2 @ (1 / s_2).diag() @ v.t()
+    b = v_2 @ (1 / s_2).diag() @ v
     return a, b, diag
 
 
@@ -68,7 +68,7 @@ def cca_by_qr(x: Tensor,
     qq = q_1.t() @ q_2
     u, diag, v = _svd(qq)
     a = r_1.inverse() @ u
-    b = r_2.inverse() @ v.t()
+    b = r_2.inverse() @ v
     return a, b, diag
 
 
