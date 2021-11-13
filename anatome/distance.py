@@ -158,6 +158,7 @@ def pwcca_distance(x: Tensor,
     """
 
     a, b, diag = cca(x, y, backend)
+    a, _ = torch.linalg.qr(a)  # reorthonormalize
     alpha = (x @ a).abs_().sum(dim=0)
     alpha /= alpha.sum()
     return 1 - alpha @ diag
