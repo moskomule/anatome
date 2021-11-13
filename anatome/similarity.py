@@ -184,7 +184,7 @@ def _svd_reduction(input: Tensor,
                       input.new_ones(1, dtype=torch.long),
                       input.new_zeros(1, dtype=torch.long)
                       ).sum()
-    return input @ right[:, : num]
+    return input @ right[:, :num]
 
 
 def _svd_reduction_keeping_fixed_dims(input: Tensor, num: int) -> Tensor:
@@ -201,7 +201,7 @@ def _svd_reduction_keeping_fixed_dims(input: Tensor, num: int) -> Tensor:
     #                   input.new_ones(1, dtype=torch.long),
     #                   input.new_zeros(1, dtype=torch.long)
     #                   ).sum()
-    return input @ right[:, : num]
+    return input @ right[:, :num]
 
 
 def _svd_reduction_keeping_fixed_dims_using_V(input: Tensor, num: int) -> Tensor:
@@ -283,7 +283,7 @@ def pwcca_distance(x: Tensor,
                    y: Tensor,
                    backend: str
                    ) -> Tensor:
-    """ Projection Weighted CCA proposed in Marcos et al. 1018.
+    """ Projection Weighted CCA proposed in Marcos et al. 2018.
 
     Args:
         x: input tensor of Shape NxD1, where it's recommended that N>Di
@@ -296,6 +296,31 @@ def pwcca_distance(x: Tensor,
 
     a, b, diag = cca(x, y, backend)
     alpha = (x @ a).abs_().sum(dim=0)
+    alpha /= alpha.sum()
+    return 1 - alpha @ diag
+
+
+def pwcca_distance2(L1: Tensor,
+                   L2: Tensor,
+                   backend: str
+                   ) -> Tensor:
+    """ Projection Weighted CCA proposed in Marcos et al. 2018.
+
+    Args:
+        x: input tensor of Shape NxD1, where it's recommended that N>Di
+        y: input tensor of Shape NxD2, where it's recommended that N>Di
+        backend: svd or qr
+
+    Returns:
+
+    """
+
+    a, b, diag = cca(L1, L2, backend)
+    # alpha = (x @ a).abs_().sum(dim=0)
+    x = L1 @ a
+    # x = L2 @ b
+    x, _ = torch.linalg.qr(input=x)
+    alpha = (x.T @ L1).abs_().sum(dim=1)
     alpha /= alpha.sum()
     return 1 - alpha @ diag
 

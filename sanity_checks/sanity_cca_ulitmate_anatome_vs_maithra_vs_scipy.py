@@ -18,7 +18,7 @@ from uutils.torch_uu.metrics.cca import cca_core, pwcca
 
 from torch import Tensor
 from anatome.similarity import svcca_distance, _cca_by_svd, _cca_by_qr, _compute_cca_traditional_equation, cca, \
-    svcca_distance_keeping_fixed_dims, pwcca_distance
+    svcca_distance_keeping_fixed_dims, pwcca_distance, pwcca_distance2
 # from anatome.distance import svcca_distance, cca_by_svd, cca_by_qr
 import numpy as np
 import random
@@ -145,7 +145,9 @@ print(f'{pwcca_mean=}')
 # ---- PWCCA test3
 # -
 print("\n------ Ultimate Anatome's PWCCA test ------")
-pwcca_ultimateanatome: Tensor = pwcca_distance(x=b1_t, y=b2_t, backend='svd')
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance(x=b1_t, y=b2_t, backend='svd')
+print(f'{pwcca_ultimateanatome=}')
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd')
 print(f'{pwcca_ultimateanatome=}')
 
 print()
