@@ -18,12 +18,15 @@ from uutils.torch_uu.metrics.cca import cca_core, pwcca
 
 from torch import Tensor
 from anatome.similarity import svcca_distance, _cca_by_svd, _cca_by_qr, _compute_cca_traditional_equation, cca, \
-    svcca_distance_keeping_fixed_dims, pwcca_distance, pwcca_distance2
+    svcca_distance_keeping_fixed_dims, pwcca_distance, pwcca_distance2, pwcca_distance3
 # from anatome.distance import svcca_distance, cca_by_svd, cca_by_qr
 import numpy as np
 import random
 
 from uutils.torch_uu.metrics.cca.uutils_cca_core_addendums import svcca_with_keeping_fixed_dims, center
+
+
+from pdb import set_trace as st
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -42,26 +45,38 @@ pprint(f'{sys.path=}')
 
 print('\n-- start cca test --')
 
-
-# tutorial shapes (500, 10000) (500, 10000) based on MNIST with 500 neurons from a FCNN
-# D, N = 500, 10_000
-D, N = 7, 12
-
-# - creating a random baseline
 # b1 = np.random.randn(*acts1.shape)
 # b2 = np.random.randn(*acts2.shape)
 print('NOTE: original tutorial does NOT center random baseline for these experiments, probably a combination of'
       'carelessness/bug or that it doesnt matter for these since b1, b2 are already centered. '
       'Tough the also forgot to center the MNIST activations, but due to BN I suspect it doesnt make a big difference.')
+
+# tutorial shapes (500, 10000) (500, 10000) based on MNIST with 500 neurons from a FCNN
+D, N = 500, 10_000
+# D, N = 7, 12
+# D, N = 2, 3
+
+# - creating a random baseline
 b1 = np.random.randn(D, N)
 b2 = np.random.randn(D, N)
 # we center for consistency, anatome also centers again, but it shouldn't matter
 b1 = center(b1)
+print(b1)
 b2 = center(b2)
+b1_t = torch.from_numpy(b1)
+b2_t = torch.from_numpy(b2)
+print(b1_t)
+b1_t = b1_t.T
+b2_t = b2_t.T
+assert(b1_t.size() == torch.Size([N, D]))
 print('-- reproducibity finger print')
 print(f'{b1.sum()=}')
 print(f'{b2.sum()=}')
+print(f'{b1_t.sum()=}')
+print(f'{b2_t.sum()=}')
 print(f'{b1.shape=}')
+print(f'{b1_t.shape=}')
+# st()
 
 # dims_to_keep: int = min(20, D)
 dims_to_keep: int = min(5, D)
@@ -85,8 +100,6 @@ print(f"{np.mean(baseline['cca_coef1'])=}")
 
 # -
 print("\n-- Ultimate Anatome's CCA --")
-b1_t, b2_t = torch.from_numpy(b1).T, torch.from_numpy(b2).T
-assert(b1_t.size() == torch.Size([N, D]))
 a, b, diag = cca(x=b1_t, y=b2_t, backend='svd')
 # a, b, diag = cca_by_svd(b1_t, b2_t)
 # a, b, diag = cca_by_qr(b1_t, b2_t)
@@ -110,24 +123,24 @@ print(f"extra test with acceptance_rate=1.0: {svcca_uanatome=} should be close t
 
 # ---- SVCCA test1 (# of num_dims to keep hardcoded instead of via variance to keep)
 # -
-print("\n\n---- Google's SVCCA test1 (# of num_dims to keep hardcoded instead of via variance to keep) ---- ")
-svcca_baseline = svcca_with_keeping_fixed_dims(x=b1, y=b2, dims_to_keep=dims_to_keep)
-svcca_keeping_fixed_dims: float = np.mean(svcca_baseline["cca_coef1"])
-print(f'{svcca_keeping_fixed_dims=}')
-
-# -
-print("\n---- Ultimate Anatome's SVCCA test1 (# of num_dims to keep hardcoded instead of via variance to keep) ----")
-svcca_uanatome_keeping_fixed_dims_original_anatome: Tensor = 1.0 - svcca_distance_keeping_fixed_dims(x=b1_t, y=b2_t,
-                                                                                    num=dims_to_keep,
-                                                                                    backend='svd',
-                                                                                    reduce_backend='original_anatome')
-print(f'{svcca_uanatome_keeping_fixed_dims_original_anatome=}')
-svcca_uanatome_keeping_fixed_dims_original_svcca: Tensor = 1.0 - svcca_distance_keeping_fixed_dims(x=b1_t, y=b2_t,
-                                                                                    num=dims_to_keep,
-                                                                                    backend='svd',
-                                                                                    reduce_backend='original_svcca')
-print(f'{svcca_uanatome_keeping_fixed_dims_original_svcca=}')
-assert approx_equal(svcca_uanatome_keeping_fixed_dims_original_anatome, svcca_keeping_fixed_dims, 0.01)
+# print("\n\n---- Google's SVCCA test1 (# of num_dims to keep hardcoded instead of via variance to keep) ---- ")
+# svcca_baseline = svcca_with_keeping_fixed_dims(x=b1, y=b2, dims_to_keep=dims_to_keep)
+# svcca_keeping_fixed_dims: float = np.mean(svcca_baseline["cca_coef1"])
+# print(f'{svcca_keeping_fixed_dims=}')
+#
+# # -
+# print("\n---- Ultimate Anatome's SVCCA test1 (# of num_dims to keep hardcoded instead of via variance to keep) ----")
+# svcca_uanatome_keeping_fixed_dims_original_anatome: Tensor = 1.0 - svcca_distance_keeping_fixed_dims(x=b1_t, y=b2_t,
+#                                                                                     num=dims_to_keep,
+#                                                                                     backend='svd',
+#                                                                                     reduce_backend='original_anatome')
+# print(f'{svcca_uanatome_keeping_fixed_dims_original_anatome=}')
+# svcca_uanatome_keeping_fixed_dims_original_svcca: Tensor = 1.0 - svcca_distance_keeping_fixed_dims(x=b1_t, y=b2_t,
+#                                                                                     num=dims_to_keep,
+#                                                                                     backend='svd',
+#                                                                                     reduce_backend='original_svcca')
+# print(f'{svcca_uanatome_keeping_fixed_dims_original_svcca=}')
+# assert approx_equal(svcca_uanatome_keeping_fixed_dims_original_anatome, svcca_keeping_fixed_dims, 0.01)
 
 # ---- SVCCA test2 (# keep .99 of variance)
 # -
@@ -141,13 +154,35 @@ print("\n------ Ultimate Anatome's SVCCA test2 (# keep .99 of variance) ------")
 print("\n\n------ Google's PWCCA test  ------ ")
 pwcca_mean, w, _ = pwcca.compute_pwcca(b1, b2, epsilon=1e-10)
 print(f'{pwcca_mean=}')
+pwcca_mean2, w, _ = pwcca.compute_pwcca2(b1, b2, epsilon=1e-10)
+print(f'{pwcca_mean2=}')
 
 # ---- PWCCA test3
 # -
 print("\n------ Ultimate Anatome's PWCCA test ------")
 pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance(x=b1_t, y=b2_t, backend='svd')
 print(f'{pwcca_ultimateanatome=}')
-pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd')
-print(f'{pwcca_ultimateanatome=}')
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd', use_layer_matrix='L1')
+print(f'L1: {pwcca_ultimateanatome=}')
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd', use_layer_matrix='L2')
+print(f'L2: {pwcca_ultimateanatome=}')
+# pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance3(b1_t, b2_t)
+# print(f'{pwcca_ultimateanatome=}')
+
+# --
+print('\n-------- do they match? --------')
+print(f'{b1.sum()=}')
+print(f'{b2.sum()=}')
+print(f'{b1_t.sum()=}')
+print(f'{b2_t.sum()=}')
+# pwcca_mean, w, _ = pwcca.compute_pwcca(acts1=b1, acts2=b2, epsilon=1e-10)
+pwcca_mean2, w, _ = pwcca.compute_pwcca2(acts1=b1, acts2=b2, epsilon=1e-10)
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(L1=b1_t, L2=b2_t, backend='svd', epsilon=1e-10)
+
+print()
+# print(f'Google\'s: {pwcca_mean=}')
+print(f'Google\'s (fixed): {pwcca_mean2=}')
+print(f'Our code: {pwcca_ultimateanatome=}')
+
 
 print()

@@ -5,6 +5,7 @@ import math
 from functools import partial
 from typing import Callable, List, Optional, Tuple, Any
 
+import numpy as np
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -301,9 +302,60 @@ def pwcca_distance(x: Tensor,
 
 
 def pwcca_distance2(L1: Tensor,
-                   L2: Tensor,
-                   backend: str
-                   ) -> Tensor:
+                    L2: Tensor,
+                    backend: str,
+                    use_layer_matrix: Optional[str] = None,
+                    epsilon: float = 0.0
+                    ) -> Tensor:
+    """ Projection Weighted CCA proposed in Marcos et al. 2018.
+
+    Args:
+        x: input tensor of Shape NxD1, where it's recommended that N>Di
+        y: input tensor of Shape NxD2, where it's recommended that N>Di
+        backend: svd or qr
+
+    Returns:
+    :param use_layer_matrix: L1 for forcing the code to use L1 and L2 for forcing the code to use L2.
+    """
+    a, b, diag = cca(L1, L2, backend)
+    if use_layer_matrix is None:
+        # sigma_xx_approx = L1
+        # sigma_yy_approx = L2
+        sigma_xx_approx = L1.T @ L1
+        sigma_yy_approx = L2.T @ L2
+        # L1_diag = torch.diag(sigma_xx_approx.abs())
+        # L2_diag = torch.diag(sigma_yy_approx.abs())
+        L1_diag = torch.diag(sigma_xx_approx.abs())
+        L2_diag = torch.diag(sigma_yy_approx.abs())
+        x_idxs = (L1_diag >= epsilon)
+        y_idxs = (L2_diag >= epsilon)
+        # mimicing if np.sum(sresults["x_idxs"]) <= np.sum(sresults["y_idxs"]): i.e.
+        # choose layer that had less small values removed, since that affects which layer matrix we use
+        # note: we don't remove the small values compared to original svcca which does remove them from sigma_xx, etc.
+        use_layer_matrix: str = 'L1' if x_idxs.sum() <= y_idxs.sum() else 'L2'
+        print(f'{use_layer_matrix=}')
+        print(f'==>{x_idxs.sum() <= y_idxs.sum()=}')
+    print(f'==> {L1.sum() = }')
+    print(f'==> {L2.sum() = }')
+    if use_layer_matrix == 'L1':
+        print(f'====> {L1.sum() = }')
+        x = L1 @ a
+        x, _ = torch.linalg.qr(input=x)
+        alpha = (x.T @ L1).abs_().sum(dim=1)
+    elif use_layer_matrix == 'L2':
+        print(f'====> {L2.sum() = }')
+        x = L2 @ b
+        x, _ = torch.linalg.qr(input=x)
+        alpha = (x.T @ L2).abs_().sum(dim=1)
+    else:
+        assert ValueError(f'Value {use_layer_matrix=} not valid.')
+    alpha /= alpha.sum()
+    return 1 - alpha @ diag
+
+
+def pwcca_distance3(L1: Tensor,
+                    L2: Tensor
+                    ):
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
 
     Args:
@@ -314,15 +366,12 @@ def pwcca_distance2(L1: Tensor,
     Returns:
 
     """
-
-    a, b, diag = cca(L1, L2, backend)
-    # alpha = (x @ a).abs_().sum(dim=0)
-    x = L1 @ a
-    # x = L2 @ b
-    x, _ = torch.linalg.qr(input=x)
-    alpha = (x.T @ L1).abs_().sum(dim=1)
-    alpha /= alpha.sum()
-    return 1 - alpha @ diag
+    from uutils.torch_uu.metrics.cca.pwcca import compute_pwcca
+    acts1: np.ndarray = L1.T.detach().cpu().numpy()
+    acts2: np.ndarray = L2.T.detach().cpu().numpy()
+    pwcca, _, _ = compute_pwcca(acts1=acts1, acts2=acts2)
+    pwcca: Tensor = uutils.torch_uu.tensorify(pwcca)
+    return 1.0 - pwcca
 
 
 def _debiased_dot_product_similarity(z: Tensor,
@@ -423,7 +472,11 @@ class SimilarityHook(object):
     """
 
     _supported_dim = (2, 4)
-    _default_backends = {'pwcca': partial(pwcca_distance, backend='svd'),
+    # _default_backends = {'pwcca': partial(pwcca_distance, backend='svd'),
+    #                      'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
+    #                      'lincka': partial(linear_cka_distance, reduce_bias=False),
+    #                      "opd": orthogonal_procrustes_distance}
+    _default_backends = {'pwcca': partial(pwcca_distance3),
                          'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
                          'lincka': partial(linear_cka_distance, reduce_bias=False),
                          "opd": orthogonal_procrustes_distance}
