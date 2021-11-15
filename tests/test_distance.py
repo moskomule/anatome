@@ -10,6 +10,22 @@ def matrices():
     return torch.randn(10, 5), torch.randn(10, 8), torch.randn(10, 20), torch.randn(8, 5)
 
 
+@pytest.mark.parametrize('mat_size', ([10, 5], [100, 50], [500, 200]))
+def test_cca_consistency(mat_size):
+    def gen():
+        x, y = torch.randn(*mat_size, dtype=torch.float64), torch.randn(*mat_size, dtype=torch.float64)
+        x = distance._zero_mean(x, 0)
+        y = distance._zero_mean(y, 0)
+        return x, y
+
+    x, y = gen()
+    cca_svd = distance.cca_by_svd(x, y)
+    cca_qr = distance.cca_by_qr(x, y)
+    torch.testing.assert_close(cca_svd[0].abs(), cca_qr[0].abs())
+    torch.testing.assert_close(cca_svd[1].abs(), cca_qr[1].abs())
+    torch.testing.assert_close(cca_svd[2], cca_qr[2])
+
+
 def test_cca_shape(matrices):
     i1, i2, i3, i4 = matrices
     distance.cca(i1, i1, 'svd')

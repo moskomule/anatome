@@ -1,12 +1,12 @@
 import contextlib
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import torch
 from torch import Tensor, nn
 
 
 def _svd(input: torch.Tensor
-         ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     # torch.svd style
     U, S, Vh = torch.linalg.svd(input, full_matrices=False)
     V = Vh.transpose(-2, -1)
@@ -15,7 +15,7 @@ def _svd(input: torch.Tensor
 
 @torch.no_grad()
 def _evaluate(model: nn.Module,
-              data: Tuple[Tensor, Tensor],
+              data: tuple[Tensor, Tensor],
               criterion: Callable[[Tensor, Tensor], Tensor],
               auto_cast: bool
               ) -> float:
@@ -46,7 +46,7 @@ def _denormalize(input: Tensor,
 
 
 def fft_shift(input: torch.Tensor,
-              dims: Optional[Tuple[int, ...]] = None
+              dims: Optional[tuple[int, ...]] = None
               ) -> torch.Tensor:
     """ PyTorch version of np.fftshift
 
@@ -62,7 +62,7 @@ def fft_shift(input: torch.Tensor,
 
 
 def ifft_shift(input: torch.Tensor,
-               dims: Optional[Tuple[int, ...]] = None
+               dims: Optional[tuple[int, ...]] = None
                ) -> torch.Tensor:
     """ PyTorch version of np.ifftshift
 

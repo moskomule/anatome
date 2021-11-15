@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Callable, Tuple, Literal
+from typing import Callable, Literal
 
 import torch
 from torch import Tensor, nn
@@ -27,7 +27,7 @@ def _check_shape_equal(x: Tensor,
 
 def cca_by_svd(x: Tensor,
                y: Tensor
-               ) -> Tuple[Tensor, Tensor, Tensor]:
+               ) -> tuple[Tensor, Tensor, Tensor]:
     """ CCA using only SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
@@ -44,15 +44,15 @@ def cca_by_svd(x: Tensor,
     u_2, s_2, v_2 = _svd(y)
     uu = u_1.t() @ u_2
     u, diag, v = _svd(uu)
-    # v @ s.diag() = v * s.view(-1, 1), but much faster
-    a = (v_1 * s_1.reciprocal_().unsqueeze_(0)) @ u
-    b = (v_2 * s_2.reciprocal_().unsqueeze_(0)) @ v
+    # a @ (1 / s_1).diag() @ u, without creating s_1.diag()
+    a = v_1 @ (1 / s_1[:, None] * u)
+    b = v_2 @ (1 / s_2[:, None] * v)
     return a, b, diag
 
 
 def cca_by_qr(x: Tensor,
               y: Tensor
-              ) -> Tuple[Tensor, Tensor, Tensor]:
+              ) -> tuple[Tensor, Tensor, Tensor]:
     """ CCA using QR and SVD.
     For more details, check Press 2011 "Canonical Correlation Clarified by Singular Value Decomposition"
 
@@ -68,15 +68,16 @@ def cca_by_qr(x: Tensor,
     q_2, r_2 = torch.linalg.qr(y)
     qq = q_1.t() @ q_2
     u, diag, v = _svd(qq)
-    a = r_1.inverse() @ u
-    b = r_2.inverse() @ v
+    # a = r_1.inverse() @ u, but it is faster and more numerically stable
+    a = torch.linalg.solve(r_1, u)
+    b = torch.linalg.solve(r_2, v)
     return a, b, diag
 
 
 def cca(x: Tensor,
         y: Tensor,
         backend: str
-        ) -> Tuple[Tensor, Tensor, Tensor]:
+        ) -> tuple[Tensor, Tensor, Tensor]:
     """ Compute CCA, Canonical Correlation Analysis
 
     Args:
@@ -157,6 +158,7 @@ def pwcca_distance(x: Tensor,
     """
 
     a, b, diag = cca(x, y, backend)
+    a, _ = torch.linalg.qr(a)  # reorthonormalize
     alpha = (x @ a).abs_().sum(dim=0)
     alpha /= alpha.sum()
     return 1 - alpha @ diag
@@ -207,7 +209,7 @@ def linear_cka_distance(x: Tensor,
         dot_prod = _debiased_dot_product_similarity(dot_prod, sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
         norm_x = _debiased_dot_product_similarity(norm_x.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
         norm_y = _debiased_dot_product_similarity(norm_y.pow_(2), sum_row_x, sum_row_y, sq_norm_x, sq_norm_y, size)
-    return 1 - dot_prod / (norm_x * norm_y)
+    return dot_prod / (norm_x * norm_y)
 
 
 def orthogonal_procrustes_distance(x: Tensor,

@@ -1,4 +1,6 @@
-from typing import Callable, List, Optional, Tuple
+from __future__ import annotations
+
+from typing import Callable
 
 import torch
 from torch import Tensor, nn
@@ -12,10 +14,10 @@ except ImportError:
 from .utils import _denormalize, _evaluate, _normalize, ifft_shift, _irfft
 
 
-def add_fourier_noise(idx: Tuple[int, int],
+def add_fourier_noise(idx: tuple[int, int],
                       images: Tensor,
                       norm: float,
-                      size: Optional[Tuple[int, int]] = None,
+                      size: tuple[int, int] = None,
                       ) -> Tensor:
     """ Add Fourier noise
 
@@ -49,12 +51,12 @@ def add_fourier_noise(idx: Tuple[int, int],
 
 @torch.no_grad()
 def fourier_map(model: nn.Module,
-                data: Tuple[Tensor, Tensor],
+                data: tuple[Tensor, Tensor],
                 criterion: Callable[[Tensor, Tensor], Tensor],
                 norm: float,
-                fourier_map_size: Optional[Tuple[int, int]] = None,
-                mean: Optional[List[float] or Tensor] = None,
-                std: Optional[List[float] or Tensor] = None,
+                fourier_map_size: Optional[tuple[int, int]] = None,
+                mean: Optional[list[float] or Tensor] = None,
+                std: Optional[list[float] or Tensor] = None,
                 auto_cast: bool = False
                 ) -> Tensor:
     """
