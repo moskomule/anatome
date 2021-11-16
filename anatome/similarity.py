@@ -376,13 +376,19 @@ def pwcca_distance3(x: Tensor,
         assert x_tilde.size() == torch.Size([B, C])
         x_tilde, _ = torch.linalg.qr(input=x_tilde)
         assert x_tilde.size() == torch.Size([B, C])
-        alpha_tilde = x_tilde.abs_().sum(dim=0)
+        alpha_tilde_dot_x_abs = (x_tilde.T @ x).abs_()
+        assert alpha_tilde_dot_x_abs.size() == torch.Size([C, D1])
+        alpha_tilde = alpha_tilde_dot_x_abs.sum(dim=1)
+        assert alpha_tilde.size() == torch.Size([C])
     elif use_layer_matrix == 'y':
         y_tilde = y @ b
         assert y_tilde.size() == torch.Size([B, C])
         y_tilde, _ = torch.linalg.qr(input=y_tilde)
         assert y_tilde.size() == torch.Size([B, C])
-        alpha_tilde = y_tilde.abs_().sum(dim=0)
+        alpha_tilde_dot_y_abs = (y_tilde.T @ y).abs_()
+        assert alpha_tilde_dot_y_abs.size() == torch.Size([C, D2])
+        alpha_tilde = alpha_tilde_dot_y_abs.sum(dim=1)
+        assert alpha_tilde.size() == torch.Size([C])
     else:
         raise ValueError(f"Invalid input: {use_layer_matrix=}")
     assert alpha_tilde.size() == torch.Size([C])
