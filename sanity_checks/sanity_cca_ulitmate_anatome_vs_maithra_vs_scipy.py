@@ -18,7 +18,8 @@ from uutils.torch_uu.metrics.cca import cca_core, pwcca
 
 from torch import Tensor
 from anatome.similarity import svcca_distance, _cca_by_svd, _cca_by_qr, _compute_cca_traditional_equation, cca, \
-    svcca_distance_keeping_fixed_dims, pwcca_distance, pwcca_distance2, pwcca_distance3
+    svcca_distance_keeping_fixed_dims, pwcca_distance, pwcca_distance2, pwcca_distance3, \
+    pwcca_distance_extended_original_anatome
 # from anatome.distance import svcca_distance, cca_by_svd, cca_by_qr
 import numpy as np
 import random
@@ -186,6 +187,9 @@ pwcca_mean2, w, _ = pwcca.compute_pwcca2(acts1=b1, acts2=b2, epsilon=1e-10)
 pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd')
 pwcca_ultimateanatome_L1: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='x')
 pwcca_ultimateanatome_L2: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='y')
+pwcca_extended_anatome: Tensor = 1.0 - pwcca_distance_extended_original_anatome(x=b1_t, y=b2_t, backend='svd')
+pwcca_extended_anatome_L1: Tensor = 1.0 - pwcca_distance_extended_original_anatome(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='x')
+pwcca_extended_anatome_L2: Tensor = 1.0 - pwcca_distance_extended_original_anatome(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='y')
 
 print()
 print(f'Google\'s: {pwcca_mean=}')
@@ -193,6 +197,9 @@ print(f'Google\'s (fixed): {pwcca_mean2=}')
 print(f'Our code: {pwcca_ultimateanatome=}')
 print(f'Our code: {pwcca_ultimateanatome_L1=}')
 print(f'Our code: {pwcca_ultimateanatome_L2=}')
+print(f'Our code: {pwcca_extended_anatome=}')
+print(f'Our code: {pwcca_extended_anatome_L1=}')
+print(f'Our code: {pwcca_extended_anatome_L2=}')
 
 
 print()

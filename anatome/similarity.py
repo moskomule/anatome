@@ -156,10 +156,10 @@ def cca(x: Tensor,
     if backend not in ('svd', 'qr'):
         raise ValueError(f'backend is svd or qr, but got {backend}')
 
-    # x = _zero_mean(x, dim=0)
-    # y = _zero_mean(y, dim=0)
-    x = _divide_by_max(_zero_mean(x, dim=0))
-    y = _divide_by_max(_zero_mean(y, dim=0))
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
+    # x = _divide_by_max(_zero_mean(x, dim=0))
+    # y = _divide_by_max(_zero_mean(y, dim=0))
     return _cca_by_svd(x, y) if backend == 'svd' else _cca_by_qr(x, y)
 
 
@@ -285,20 +285,18 @@ def pwcca_distance(x: Tensor,
                    backend: str
                    ) -> Tensor:
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
-
     Args:
-        x: input tensor of Shape NxD1, where it's recommended that N>Di
-        y: input tensor of Shape NxD2, where it's recommended that N>Di
+        x: input tensor of Shape DxH, where D>H
+        y: input tensor of Shape DxW, where D>H
         backend: svd or qr
-
     Returns:
-
     """
 
     a, b, diag = cca(x, y, backend)
+    a, _ = torch.linalg.qr(a)  # reorthonormalize
     alpha = (x @ a).abs_().sum(dim=0)
     alpha /= alpha.sum()
-    return 1 - alpha @ diag
+    return 1.0 - alpha @ diag
 
 
 def pwcca_distance2(x: Tensor,
@@ -351,6 +349,10 @@ def pwcca_distance3(x: Tensor,
     Returns:
 
     """
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
+    # x = _divide_by_max(_zero_mean(x, dim=0))
+    # y = _divide_by_max(_zero_mean(y, dim=0))
     B, D1 = x.size()
     B2, D2 = y.size()
     assert B == B2
@@ -447,9 +449,9 @@ def pwcca_distance_choose_best_layer_matrix(L1: Tensor,
     return 1 - alpha @ diag
 
 
-def pwcca_distance_from_origina_svcca(L1: Tensor,
-                                      L2: Tensor
-                                      ):
+def pwcca_distance_from_original_svcca(L1: Tensor,
+                                       L2: Tensor
+                                       ):
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
 
     Args:
@@ -466,6 +468,48 @@ def pwcca_distance_from_origina_svcca(L1: Tensor,
     pwcca, _, _ = compute_pwcca(acts1=acts1, acts2=acts2)
     pwcca: Tensor = uutils.torch_uu.tensorify(pwcca)
     return 1.0 - pwcca
+
+
+def pwcca_distance_extended_original_anatome(x: Tensor,
+                                             y: Tensor,
+                                             backend: str,
+                                             use_layer_matrix: Optional[str] = None,
+                                             epsilon: float = 1e-10
+                                             ) -> Tensor:
+    """ Projection Weighted CCA proposed in Marcos et al. 2018.
+    Args:
+        x: input tensor of Shape DxH, where D>H
+        y: input tensor of Shape DxW, where D>H
+        backend: svd or qr
+        param use_layer_matrix:
+    Returns:
+    """
+    x = _zero_mean(x, dim=0)
+    y = _zero_mean(y, dim=0)
+    # x = _divide_by_max(_zero_mean(x, dim=0))
+    # y = _divide_by_max(_zero_mean(y, dim=0))
+    a, b, diag = cca(x, y, backend)
+    if use_layer_matrix is None:
+        # sigma_xx_approx = x
+        # sigma_yy_approx = y
+        sigma_xx_approx = x.T @ x
+        sigma_yy_approx = y.T @ y
+        x_diag = torch.diag(sigma_xx_approx.abs())
+        y_diag = torch.diag(sigma_yy_approx.abs())
+        x_idxs = (x_diag >= epsilon)
+        y_idxs = (y_diag >= epsilon)
+        use_layer_matrix: str = 'x' if x_idxs.sum() <= y_idxs.sum() else 'y'
+    if use_layer_matrix == 'x':
+        a, b, diag = cca(x, y, backend)
+        a, _ = torch.linalg.qr(a)  # reorthonormalize
+        alpha = (x @ a).abs_().sum(dim=0)
+        alpha /= alpha.sum()
+    elif use_layer_matrix == 'y':
+        a, b, diag = cca(x, y, backend)
+        b, _ = torch.linalg.qr(b)  # reorthonormalize
+        alpha = (y @ b).abs_().sum(dim=0)
+        alpha /= alpha.sum()
+    return 1.0 - alpha @ diag
 
 
 def _debiased_dot_product_similarity(z: Tensor,
