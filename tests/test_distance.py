@@ -26,15 +26,18 @@ def test_cca_consistency(mat_size):
     torch.testing.assert_close(cca_svd[2], cca_qr[2])
 
 
-def test_cca_shape(matrices):
+@pytest.mark.parametrize('method', ['svd', 'qr'])
+def test_cca_shape(matrices, method):
     i1, i2, i3, i4 = matrices
-    distance.cca(i1, i1, 'svd')
-    distance.cca(i1, i2, 'qr')
+    distance.cca(i1, i1, method)
+    a, b, diag = distance.cca(i1, i2, method)
+    assert list(a.size()) == [i1.size(1), diag.size(0)]
+    assert list(b.size()) == [i2.size(1), diag.size(0)]
     with pytest.raises(ValueError):
         # needs more batch size
-        distance.cca(i1, i3, 'svd')
+        distance.cca(i1, i3, method)
     with pytest.raises(ValueError):
-        distance.cca(i1, i4, 'svd')
+        distance.cca(i1, i4, method)
     with pytest.raises(ValueError):
         distance.cca(i1, i2, 'wrong')
 
