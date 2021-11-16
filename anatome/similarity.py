@@ -280,23 +280,23 @@ def svcca_distance_keeping_fixed_dims(x: Tensor,
     return 1.0 - diag.mean()
 
 
-def pwcca_distance(x: Tensor,
-                   y: Tensor,
-                   backend: str
-                   ) -> Tensor:
-    """ Projection Weighted CCA proposed in Marcos et al. 2018.
-    Args:
-        x: input tensor of Shape DxH, where D>H
-        y: input tensor of Shape DxW, where D>H
-        backend: svd or qr
-    Returns:
-    """
-
-    a, b, diag = cca(x, y, backend)
-    a, _ = torch.linalg.qr(a)  # reorthonormalize
-    alpha = (x @ a).abs_().sum(dim=0)
-    alpha /= alpha.sum()
-    return 1.0 - alpha @ diag
+# def pwcca_distance(x: Tensor,
+#                    y: Tensor,
+#                    backend: str
+#                    ) -> Tensor:
+#     """ Projection Weighted CCA proposed in Marcos et al. 2018.
+#     Args:
+#         x: input tensor of Shape DxH, where D>H
+#         y: input tensor of Shape DxW, where D>H
+#         backend: svd or qr
+#     Returns:
+#     """
+#
+#     a, b, diag = cca(x, y, backend)
+#     a, _ = torch.linalg.qr(a)  # reorthonormalize
+#     alpha = (x @ a).abs_().sum(dim=0)
+#     alpha /= alpha.sum()
+#     return 1.0 - alpha @ diag
 
 
 def _pwcca_distance2(x: Tensor,
@@ -421,46 +421,46 @@ def _pwcca_distance_from_original_svcca(L1: Tensor,
     return 1.0 - pwcca
 
 
-def _pwcca_distance_extended_original_anatome(x: Tensor,
-                                              y: Tensor,
-                                              backend: str,
-                                              use_layer_matrix: Optional[str] = None,
-                                              epsilon: float = 1e-10
-                                              ) -> Tensor:
-    """ Projection Weighted CCA proposed in Marcos et al. 2018.
-    Args:
-        x: input tensor of Shape DxH, where D>H
-        y: input tensor of Shape DxW, where D>H
-        backend: svd or qr
-        param use_layer_matrix:
-    Returns:
-    """
-    x = _zero_mean(x, dim=0)
-    y = _zero_mean(y, dim=0)
-    # x = _divide_by_max(_zero_mean(x, dim=0))
-    # y = _divide_by_max(_zero_mean(y, dim=0))
-    a, b, diag = cca(x, y, backend)
-    if use_layer_matrix is None:
-        # sigma_xx_approx = x
-        # sigma_yy_approx = y
-        sigma_xx_approx = x.T @ x
-        sigma_yy_approx = y.T @ y
-        x_diag = torch.diag(sigma_xx_approx.abs())
-        y_diag = torch.diag(sigma_yy_approx.abs())
-        x_idxs = (x_diag >= epsilon)
-        y_idxs = (y_diag >= epsilon)
-        use_layer_matrix: str = 'x' if x_idxs.sum() <= y_idxs.sum() else 'y'
-    if use_layer_matrix == 'x':
-        a, b, diag = cca(x, y, backend)
-        a, _ = torch.linalg.qr(a)  # reorthonormalize
-        alpha = (x @ a).abs_().sum(dim=0)
-        alpha /= alpha.sum()
-    elif use_layer_matrix == 'y':
-        a, b, diag = cca(x, y, backend)
-        b, _ = torch.linalg.qr(b)  # reorthonormalize
-        alpha = (y @ b).abs_().sum(dim=0)
-        alpha /= alpha.sum()
-    return 1.0 - alpha @ diag
+# def _pwcca_distance_extended_original_anatome(x: Tensor,
+#                                               y: Tensor,
+#                                               backend: str,
+#                                               use_layer_matrix: Optional[str] = None,
+#                                               epsilon: float = 1e-10
+#                                               ) -> Tensor:
+#     """ Projection Weighted CCA proposed in Marcos et al. 2018.
+#     Args:
+#         x: input tensor of Shape DxH, where D>H
+#         y: input tensor of Shape DxW, where D>H
+#         backend: svd or qr
+#         param use_layer_matrix:
+#     Returns:
+#     """
+#     x = _zero_mean(x, dim=0)
+#     y = _zero_mean(y, dim=0)
+#     # x = _divide_by_max(_zero_mean(x, dim=0))
+#     # y = _divide_by_max(_zero_mean(y, dim=0))
+#     a, b, diag = cca(x, y, backend)
+#     if use_layer_matrix is None:
+#         # sigma_xx_approx = x
+#         # sigma_yy_approx = y
+#         sigma_xx_approx = x.T @ x
+#         sigma_yy_approx = y.T @ y
+#         x_diag = torch.diag(sigma_xx_approx.abs())
+#         y_diag = torch.diag(sigma_yy_approx.abs())
+#         x_idxs = (x_diag >= epsilon)
+#         y_idxs = (y_diag >= epsilon)
+#         use_layer_matrix: str = 'x' if x_idxs.sum() <= y_idxs.sum() else 'y'
+#     if use_layer_matrix == 'x':
+#         a, b, diag = cca(x, y, backend)
+#         a, _ = torch.linalg.qr(a)  # reorthonormalize
+#         alpha = (x @ a).abs_().sum(dim=0)
+#         alpha /= alpha.sum()
+#     elif use_layer_matrix == 'y':
+#         a, b, diag = cca(x, y, backend)
+#         b, _ = torch.linalg.qr(b)  # reorthonormalize
+#         alpha = (y @ b).abs_().sum(dim=0)
+#         alpha /= alpha.sum()
+#     return 1.0 - alpha @ diag
 
 
 def _debiased_dot_product_similarity(z: Tensor,
