@@ -5,6 +5,11 @@ close to values of other code.
 conda install pytorch torchvision torchaudio -c pytorch
 
 conda install pytorch torchvision torchaudio -c pytorch==1.10
+
+refs:
+    - https://github.com/moskomule/anatome/issues/30
+    - https://github.com/moskomule/anatome/issues/27
+    - https://stackoverflow.com/questions/69993768/how-does-one-implement-pwcca-in-pytorch-match-the-original-pwcca-implemented-in
 """
 #%%
 import sys
@@ -18,8 +23,7 @@ from uutils.torch_uu.metrics.cca import cca_core, pwcca
 
 from torch import Tensor
 from anatome.similarity import svcca_distance, _cca_by_svd, _cca_by_qr, _compute_cca_traditional_equation, cca, \
-    svcca_distance_keeping_fixed_dims, pwcca_distance, pwcca_distance2, pwcca_distance3, \
-    pwcca_distance_extended_original_anatome
+    svcca_distance_keeping_fixed_dims, pwcca_distance_choose_best_layer_matrix
 # from anatome.distance import svcca_distance, cca_by_svd, cca_by_qr
 import numpy as np
 import random
@@ -184,9 +188,9 @@ pwcca_mean, w, _ = pwcca.compute_pwcca(acts1=b1, acts2=b2, epsilon=1e-10)
 pwcca_mean2, w, _ = pwcca.compute_pwcca2(acts1=b1, acts2=b2, epsilon=1e-10)
 # pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance_choose_best_layer_matrix(L1=b1_t, L2=b2_t, backend='svd', epsilon=1e-10)
 # pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(x=b1_t, y=b2_t, backend='svd')
-pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd')
-pwcca_ultimateanatome_L1: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='x')
-pwcca_ultimateanatome_L2: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='y')
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance_choose_best_layer_matrix(x=b1_t, y=b2_t, backend='svd')
+pwcca_ultimateanatome_L1: Tensor = 1.0 - pwcca_distance_choose_best_layer_matrix(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='x')
+pwcca_ultimateanatome_L2: Tensor = 1.0 - pwcca_distance_choose_best_layer_matrix(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='y')
 # pwcca_extended_anatome: Tensor = 1.0 - pwcca_distance_extended_original_anatome(x=b1_t, y=b2_t, backend='svd')
 # pwcca_extended_anatome_L1: Tensor = 1.0 - pwcca_distance_extended_original_anatome(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='x')
 # pwcca_extended_anatome_L2: Tensor = 1.0 - pwcca_distance_extended_original_anatome(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='y')
