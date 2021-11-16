@@ -52,13 +52,17 @@ print('NOTE: original tutorial does NOT center random baseline for these experim
       'Tough the also forgot to center the MNIST activations, but due to BN I suspect it doesnt make a big difference.')
 
 # tutorial shapes (500, 10000) (500, 10000) based on MNIST with 500 neurons from a FCNN
-D, N = 500, 10_000
+# D, N = 500, 10_000
 # D, N = 7, 12
 # D, N = 2, 3
+# D1, D2 = D, D
+
+N = 1_000
+D1, D2 = 50, 60
 
 # - creating a random baseline
-b1 = np.random.randn(D, N)
-b2 = np.random.randn(D, N)
+b1 = np.random.randn(D1, N)
+b2 = np.random.randn(D2, N)
 # we center for consistency, anatome also centers again, but it shouldn't matter
 b1 = center(b1)
 print(b1)
@@ -68,7 +72,7 @@ b2_t = torch.from_numpy(b2)
 print(b1_t)
 b1_t = b1_t.T
 b2_t = b2_t.T
-assert(b1_t.size() == torch.Size([N, D]))
+assert(b1_t.size() == torch.Size([N, D1]))
 print('-- reproducibity finger print')
 print(f'{b1.sum()=}')
 print(f'{b2.sum()=}')
@@ -79,7 +83,7 @@ print(f'{b1_t.shape=}')
 # st()
 
 # dims_to_keep: int = min(20, D)
-dims_to_keep: int = min(5, D)
+dims_to_keep: int = min(5, max(D1, D2))
 
 # ---- CCA test
 # - get cca values for baseline
@@ -160,12 +164,12 @@ print(f'{pwcca_mean2=}')
 # ---- PWCCA test3
 # -
 print("\n------ Ultimate Anatome's PWCCA test ------")
-pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance(x=b1_t, y=b2_t, backend='svd')
-print(f'{pwcca_ultimateanatome=}')
-pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd', use_layer_matrix='L1')
-print(f'L1: {pwcca_ultimateanatome=}')
-pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd', use_layer_matrix='L2')
-print(f'L2: {pwcca_ultimateanatome=}')
+# pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance(x=b1_t, y=b2_t, backend='svd')
+# print(f'{pwcca_ultimateanatome=}')
+# pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd', use_layer_matrix='L1')
+# print(f'L1: {pwcca_ultimateanatome=}')
+# pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(b1_t, b2_t, backend='svd', use_layer_matrix='L2')
+# print(f'L2: {pwcca_ultimateanatome=}')
 # pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance3(b1_t, b2_t)
 # print(f'{pwcca_ultimateanatome=}')
 
@@ -175,14 +179,20 @@ print(f'{b1.sum()=}')
 print(f'{b2.sum()=}')
 print(f'{b1_t.sum()=}')
 print(f'{b2_t.sum()=}')
-# pwcca_mean, w, _ = pwcca.compute_pwcca(acts1=b1, acts2=b2, epsilon=1e-10)
+pwcca_mean, w, _ = pwcca.compute_pwcca(acts1=b1, acts2=b2, epsilon=1e-10)
 pwcca_mean2, w, _ = pwcca.compute_pwcca2(acts1=b1, acts2=b2, epsilon=1e-10)
-pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(L1=b1_t, L2=b2_t, backend='svd', epsilon=1e-10)
+# pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance_choose_best_layer_matrix(L1=b1_t, L2=b2_t, backend='svd', epsilon=1e-10)
+# pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance2(x=b1_t, y=b2_t, backend='svd')
+pwcca_ultimateanatome: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd')
+pwcca_ultimateanatome_L1: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='x')
+pwcca_ultimateanatome_L2: Tensor = 1.0 - pwcca_distance3(x=b1_t, y=b2_t, backend='svd', use_layer_matrix='y')
 
 print()
-# print(f'Google\'s: {pwcca_mean=}')
+print(f'Google\'s: {pwcca_mean=}')
 print(f'Google\'s (fixed): {pwcca_mean2=}')
 print(f'Our code: {pwcca_ultimateanatome=}')
+print(f'Our code: {pwcca_ultimateanatome_L1=}')
+print(f'Our code: {pwcca_ultimateanatome_L2=}')
 
 
 print()

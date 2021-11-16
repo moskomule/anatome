@@ -301,12 +301,102 @@ def pwcca_distance(x: Tensor,
     return 1 - alpha @ diag
 
 
-def pwcca_distance2(L1: Tensor,
-                    L2: Tensor,
+def pwcca_distance2(x: Tensor,
+                    y: Tensor,
+                    backend: str
+                    ) -> Tensor:
+    """ Projection Weighted CCA proposed in Marcos et al. 2018.
+
+    Args:
+        x: input tensor of Shape NxD1, where it's recommended that N>Di
+        y: input tensor of Shape NxD2, where it's recommended that N>Di
+        backend: svd or qr
+
+    Returns:
+
+    """
+    B, D1 = x.size()
+    B2, D2 = y.size()
+    assert B == B2
+    C_ = min(D1, D2)
+    a, b, diag = cca(x, y, backend)
+    C = diag.size(0)
+    assert (C == C_)
+    assert a.size() == torch.Size([D1, C])
+    assert diag.size() == torch.Size([C])
+    assert b.size() == torch.Size([D2, C])
+    x_tilde = x @ a
+    assert x_tilde.size() == torch.Size([B, C])
+    # x, _ = torch.linalg.qr(input=x)
+    alpha_tilde = x_tilde.abs_().sum(dim=0)
+    assert alpha_tilde.size() == torch.Size([C])
+    alpha = alpha_tilde / alpha_tilde.sum()
+    assert alpha_tilde.size() == torch.Size([C])
+    return 1.0 - (alpha @ diag)
+
+
+def pwcca_distance3(x: Tensor,
+                    y: Tensor,
                     backend: str,
                     use_layer_matrix: Optional[str] = None,
-                    epsilon: float = 0.0
+                    epsilon: float = 1e-10
                     ) -> Tensor:
+    """ Projection Weighted CCA proposed in Marcos et al. 2018.
+
+    Args:
+        x: input tensor of Shape NxD1, where it's recommended that N>Di
+        y: input tensor of Shape NxD2, where it's recommended that N>Di
+        backend: svd or qr
+
+    Returns:
+
+    """
+    B, D1 = x.size()
+    B2, D2 = y.size()
+    assert B == B2
+    C_ = min(D1, D2)
+    a, b, diag = cca(x, y, backend)
+    C = diag.size(0)
+    assert (C == C_)
+    assert a.size() == torch.Size([D1, C])
+    assert diag.size() == torch.Size([C])
+    assert b.size() == torch.Size([D2, C])
+    if use_layer_matrix is None:
+        # sigma_xx_approx = x
+        # sigma_yy_approx = y
+        sigma_xx_approx = x.T @ x
+        sigma_yy_approx = y.T @ y
+        x_diag = torch.diag(sigma_xx_approx.abs())
+        y_diag = torch.diag(sigma_yy_approx.abs())
+        x_idxs = (x_diag >= epsilon)
+        y_idxs = (y_diag >= epsilon)
+        use_layer_matrix: str = 'x' if x_idxs.sum() <= y_idxs.sum() else 'y'
+    if use_layer_matrix == 'x':
+        x_tilde = x @ a
+        assert x_tilde.size() == torch.Size([B, C])
+        x_tilde, _ = torch.linalg.qr(input=x_tilde)
+        assert x_tilde.size() == torch.Size([B, C])
+        alpha_tilde = x_tilde.abs_().sum(dim=0)
+    elif use_layer_matrix == 'y':
+        y_tilde = y @ b
+        assert y_tilde.size() == torch.Size([B, C])
+        y_tilde, _ = torch.linalg.qr(input=y_tilde)
+        assert y_tilde.size() == torch.Size([B, C])
+        alpha_tilde = y_tilde.abs_().sum(dim=0)
+    else:
+        raise ValueError(f"Invalid input: {use_layer_matrix=}")
+    assert alpha_tilde.size() == torch.Size([C])
+    alpha = alpha_tilde / alpha_tilde.sum()
+    assert alpha_tilde.size() == torch.Size([C])
+    return 1.0 - (alpha @ diag)
+
+
+def pwcca_distance_choose_best_layer_matrix(L1: Tensor,
+                                            L2: Tensor,
+                                            backend: str,
+                                            use_layer_matrix: Optional[str] = None,
+                                            epsilon: float = 0.0
+                                            ) -> Tensor:
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
 
     Args:
@@ -319,31 +409,29 @@ def pwcca_distance2(L1: Tensor,
     """
     a, b, diag = cca(L1, L2, backend)
     if use_layer_matrix is None:
-        # sigma_xx_approx = L1
-        # sigma_yy_approx = L2
-        sigma_xx_approx = L1.T @ L1
-        sigma_yy_approx = L2.T @ L2
-        # L1_diag = torch.diag(sigma_xx_approx.abs())
-        # L2_diag = torch.diag(sigma_yy_approx.abs())
+        sigma_xx_approx = L1
+        sigma_yy_approx = L2
+        # sigma_xx_approx = L1.T @ L1
+        # sigma_yy_approx = L2.T @ L2
         L1_diag = torch.diag(sigma_xx_approx.abs())
         L2_diag = torch.diag(sigma_yy_approx.abs())
         x_idxs = (L1_diag >= epsilon)
         y_idxs = (L2_diag >= epsilon)
-        # mimicing if np.sum(sresults["x_idxs"]) <= np.sum(sresults["y_idxs"]): i.e.
+        # mimicking if np.sum(sresults["x_idxs"]) <= np.sum(sresults["y_idxs"]): i.e.
         # choose layer that had less small values removed, since that affects which layer matrix we use
         # note: we don't remove the small values compared to original svcca which does remove them from sigma_xx, etc.
         use_layer_matrix: str = 'L1' if x_idxs.sum() <= y_idxs.sum() else 'L2'
-        print(f'{use_layer_matrix=}')
-        print(f'==>{x_idxs.sum() <= y_idxs.sum()=}')
-    print(f'==> {L1.sum() = }')
-    print(f'==> {L2.sum() = }')
+        # print(f'{use_layer_matrix=}')
+        # print(f'==>{x_idxs.sum() <= y_idxs.sum()=}')
+    # print(f'==> {L1.sum() = }')
+    # print(f'==> {L2.sum() = }')
     if use_layer_matrix == 'L1':
-        print(f'====> {L1.sum() = }')
+        # print(f'====> {L1.sum() = }')
         x = L1 @ a
         x, _ = torch.linalg.qr(input=x)
         alpha = (x.T @ L1).abs_().sum(dim=1)
     elif use_layer_matrix == 'L2':
-        print(f'====> {L2.sum() = }')
+        # print(f'====> {L2.sum() = }')
         x = L2 @ b
         x, _ = torch.linalg.qr(input=x)
         alpha = (x.T @ L2).abs_().sum(dim=1)
@@ -353,9 +441,9 @@ def pwcca_distance2(L1: Tensor,
     return 1 - alpha @ diag
 
 
-def pwcca_distance3(L1: Tensor,
-                    L2: Tensor
-                    ):
+def pwcca_distance_from_origina_svcca(L1: Tensor,
+                                      L2: Tensor
+                                      ):
     """ Projection Weighted CCA proposed in Marcos et al. 2018.
 
     Args:
@@ -476,7 +564,11 @@ class SimilarityHook(object):
     #                      'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
     #                      'lincka': partial(linear_cka_distance, reduce_bias=False),
     #                      "opd": orthogonal_procrustes_distance}
-    _default_backends = {'pwcca': partial(pwcca_distance3),
+    # _default_backends = {'pwcca': partial(pwcca_distance_choose_best_layer_matrix, backend='svd', epsilon=1e-10),
+    #                      'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
+    #                      'lincka': partial(linear_cka_distance, reduce_bias=False),
+    #                      "opd": orthogonal_procrustes_distance}
+    _default_backends = {'pwcca': partial(pwcca_distance2, backend='svd'),
                          'svcca': partial(svcca_distance, accept_rate=0.99, backend='svd'),
                          'lincka': partial(linear_cka_distance, reduce_bias=False),
                          "opd": orthogonal_procrustes_distance}
