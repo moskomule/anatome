@@ -186,6 +186,7 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
                                      )
         layer_key: LayerIdentifier = layer1 if layer1 == layer2 else (layer1, layer2)
         dists_od[layer_key] = dist
+    assert len(dists_od) == len(layer_names1)
     _clear_hooks(hooks1)
     _clear_hooks(hooks2)
     return dists_od
