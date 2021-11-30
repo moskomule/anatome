@@ -132,7 +132,10 @@ If you use this implementation in your research, please conser citing my version
     year={2021}
 }
 ```
-and the original version:
+A permanent link lives here: https://www.ideals.illinois.edu/handle/2142/112796
+
+
+Also consider citing the original version where we took good inspiration:
 
 ```
 @software{hataya2020anatome,
