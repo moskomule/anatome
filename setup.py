@@ -4,6 +4,7 @@ import pathlib
 
 # The directory containing this file
 # HERE = pathlib.Path(__file__).parent
+# here = os.path.abspath(os.path.dirname(__file__))
 HERE = pathlib.Path('~/ultimate-anatome/').expanduser()
 
 # The text of the README file
