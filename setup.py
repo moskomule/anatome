@@ -1,3 +1,9 @@
+"""
+conda create -n uanatome python=3.9
+conda activate uanatome
+conda remove --all --name uanatome
+rm -rf /Users/brando/anaconda3/envs/uanatome
+"""
 from setuptools import find_packages, setup
 
 import pathlib
@@ -30,6 +36,7 @@ setup(
     packages=find_packages(),
     install_requires=['torch>=1.9.0',
                       'torchvision>=0.10.0',
+                      'torchaudio>=0.9.1',
                       'tqdm'
                       ]
 )
