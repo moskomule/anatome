@@ -16,12 +16,6 @@ HERE = pathlib.Path('~/ultimate-anatome/').expanduser()
 # The text of the README file
 README = (HERE / "README.md").read_text()
 
-# install_requires = [
-#     'torch>=1.9.0',
-#     'torchvision>=0.10.0',
-#     'tqdm'
-# ]
-
 setup(
     name='ultimate-anatome',
     version='0.1.1',
