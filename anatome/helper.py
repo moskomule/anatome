@@ -251,8 +251,11 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
         distances_per_data_sets_per_layer: list[OrderedDict[LayerIdentifier, float]],
         dist2sim: bool = False) -> tuple[OrderedDict[LayerIdentifier, float], OrderedDict[LayerIdentifier, float]]:
     """
-    [B, L] -> [L] * 2, means and stds
+    Given a list of distances [B, L] compute the diversity (per layer) [L].
+
+    [B, L] -> [L]^2, means and cis
     """
+    from uutils.torch_uu.metrics.confidence_intervals import torch_compute_confidence_interval
     from uutils.torch_uu import tensorify
     # - get layer ids
     layer_ids: list[LayerIdentifier] = list(distances_per_data_sets_per_layer[0].keys())
@@ -268,23 +271,27 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
     assert (distances_per_data_sets_per_layer.dim() == 2)
 
     # - [B, L] -> [L] get the avg distance/sim for each layer (and std)
-    means_per_layer: Tensor = distances_per_data_sets_per_layer.mean(dim=0)
-    stds_per_layer: Tensor = distances_per_data_sets_per_layer.std(dim=0)
-    L: int = len(distances_per_data_sets_per_layer[0])
+    L: int = len(distances_per_data_sets_per_layer.size(1))
+    # means_per_layer: Tensor = distances_per_data_sets_per_layer.mean(dim=0)
+    # stds_per_layer: Tensor = distances_per_data_sets_per_layer.std(dim=0)
+    # compute [mu_l, ci_l]_{l \in [L]}
+    mu_ci_per_layer: list[tuple[Tensor, Tensor]] = [torch_compute_confidence_interval(distances_per_data_sets_per_layer[:, l]) for l in L]
+    means_per_layer = tensorify([mu for mu, _ in mu_ci_per_layer])
+    cis_per_layer = tensorify([ci for _, ci in mu_ci_per_layer])
     assert means_per_layer.size() == torch.Size([L])
-    assert stds_per_layer.size() == torch.Size([L])
+    assert cis_per_layer.size() == torch.Size([L])
 
     # [L, 1] -> OrderDict([L])
     assert len(layer_ids) == L == len(layer_names1)
     mean_distance_per_layer: OrderedDict[LayerIdentifier, float] = OrderedDict()
-    std_distance_per_layer: OrderedDict[LayerIdentifier, float] = OrderedDict()
+    ci_distance_per_layer: OrderedDict[LayerIdentifier, float] = OrderedDict()
     for l_idx in range(L):
         layer_id: LayerIdentifier = layer_ids[l_idx]
         mu: float = means_per_layer[l_idx].item()
-        std: float = stds_per_layer[l_idx].item()
+        ci: float = cis_per_layer[l_idx].item()
         mean_distance_per_layer[layer_id] = mu
-        std_distance_per_layer[layer_id] = std
-    return mean_distance_per_layer, std_distance_per_layer
+        ci_distance_per_layer[layer_id] = ci
+    return mean_distance_per_layer, ci_distance_per_layer
 
 
 def compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(
