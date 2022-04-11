@@ -11,6 +11,9 @@ from collections import OrderedDict
 
 from torch import nn, Tensor
 
+
+from pdb import set_trace as st
+
 LayerIdentifier = Union[str, tuple[str]]
 
 
@@ -163,6 +166,9 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
     assert len(layer_names1) == len(layer_names2), f'Expected same number of layers for comparing both nets but got: ' \
                                                    f'{(len(layer_names1))=}, {len(layer_names2)=}'
     # - create hooks for each layer name
+    # mdl1 = mdl1
+    # mdl2 = deepcopy(mdl2)
+    print(f'{(mdl1 is mdl2)=}')
     hooks1: list[SimilarityHook] = SimilarityHook.create_hooks(mdl1, layer_names1, metric_comparison_type, force_cpu)
     hooks2: list[SimilarityHook] = SimilarityHook.create_hooks(mdl2, layer_names2, metric_comparison_type, force_cpu)
     # - fill hooks with intermediate representations
@@ -260,6 +266,8 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
     # - get layer ids
     layer_ids: list[LayerIdentifier] = list(distances_per_data_sets_per_layer[0].keys())
     layer_names1 = layer_ids
+    L: int = len(layer_names1)
+    B: int = len(distances_per_data_sets_per_layer)
 
     # -list(OrderDict([B, L])) -> list([B, L])
     distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
@@ -269,13 +277,11 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
         # dist -> sim
         distances_per_data_sets_per_layer: Tensor = 1.0 - distances_per_data_sets_per_layer
     assert (distances_per_data_sets_per_layer.dim() == 2)
+    assert len(distances_per_data_sets_per_layer) == B
+    assert len(distances_per_data_sets_per_layer[0]) == L
 
-    # - [B, L] -> [L] get the avg distance/sim for each layer (and std)
-    L: int = len(distances_per_data_sets_per_layer.size(1))
-    # means_per_layer: Tensor = distances_per_data_sets_per_layer.mean(dim=0)
-    # stds_per_layer: Tensor = distances_per_data_sets_per_layer.std(dim=0)
-    # compute [mu_l, ci_l]_{l \in [L]}
-    mu_ci_per_layer: list[tuple[Tensor, Tensor]] = [torch_compute_confidence_interval(distances_per_data_sets_per_layer[:, l]) for l in L]
+    # - [B, L] -> [L] compute expectation of distance tasks (i.e. div) & cis for each layer
+    mu_ci_per_layer: list[tuple[Tensor, Tensor]] = [torch_compute_confidence_interval(distances_per_data_sets_per_layer[:, l]) for l in range(L)]
     means_per_layer = tensorify([mu for mu, _ in mu_ci_per_layer])
     cis_per_layer = tensorify([ci for _, ci in mu_ci_per_layer])
     assert means_per_layer.size() == torch.Size([L])
@@ -291,6 +297,8 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
         ci: float = cis_per_layer[l_idx].item()
         mean_distance_per_layer[layer_id] = mu
         ci_distance_per_layer[layer_id] = ci
+    assert len(mean_distance_per_layer) == L
+    assert len(ci_distance_per_layer) == L
     return mean_distance_per_layer, ci_distance_per_layer
 
 

@@ -16,6 +16,9 @@ from anatome.utils import _irfft, _rfft, _svd, fftfreq
 # - safe value for N' = s*D' according to svcca paper and our santiy checks to get trust worthy CCA sims.
 from uutils import torch_uu
 
+
+from pdb import set_trace as st
+
 SAFTEY_VAL: int = 10
 
 
@@ -704,6 +707,9 @@ class SimilarityHook(object):
         assert (metric_as_sim_or_dist in ['dist', 'sim']), f'Error not valid sim or dist got: {metric_as_sim_or_dist=}'
         self_tensor = self.hooked_tensors
         other_tensor = other.hooked_tensors
+        print(f'{self_tensor.size()=}')
+        print(f'{other_tensor.size()=}')
+        # st()
         if not self.force_cpu:
             # hooked_tensors is CPU tensor, so need to device
             self_tensor = self_tensor.to(self.device)
