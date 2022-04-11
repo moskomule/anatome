@@ -162,6 +162,7 @@ def dist_data_set_per_layer(mdl1: nn.Module, mdl2: nn.Module,
 
     :return: [L, 1] as a iterable (e.g. list of floats per layer) correponding to the distance for each layer.
     """
+    assert metric_as_sim_or_dist == 'dist'
     from anatome.similarity import SimilarityHook
     assert len(layer_names1) == len(layer_names2), f'Expected same number of layers for comparing both nets but got: ' \
                                                    f'{(len(layer_names1))=}, {len(layer_names2)=}'
@@ -221,6 +222,7 @@ def dist_batch_data_sets_for_all_layer(mdl1: nn.Module, mdl2: nn.Module,
 
     :return:
     """
+    assert metric_as_sim_or_dist == 'dist'
     assert len(X1.size()) == 5, f'Data set does not 5 dims i.e. [B, M, C, H, W] instead got: {X1.size()=}'
     assert len(X2.size()) == 5, f'Data set does not 5 dims i.e. [B, M, C, H, W] instead got: {X2.size()=}'
     # - get distances per data sets/tasks per layers: [B, M, C, H, W], [L] -> [B, L]
@@ -273,9 +275,9 @@ def compute_stats_from_distance_per_batch_of_data_sets_per_layer(
     distances_per_data_sets_per_layer: list[list[float]] = _dists_per_task_per_layer_to_list(
         distances_per_data_sets_per_layer)
     distances_per_data_sets_per_layer: Tensor = tensorify(distances_per_data_sets_per_layer)
-    if dist2sim:
-        # dist -> sim
-        distances_per_data_sets_per_layer: Tensor = 1.0 - distances_per_data_sets_per_layer
+    # if dist2sim:
+    #     # dist -> sim
+    #     distances_per_data_sets_per_layer: Tensor = 1.0 - distances_per_data_sets_per_layer
     assert (distances_per_data_sets_per_layer.dim() == 2)
     assert len(distances_per_data_sets_per_layer) == B
     assert len(distances_per_data_sets_per_layer[0]) == L
@@ -362,79 +364,79 @@ def pprint_results(mus: OrderedDict, stds: OrderedDict):
 
 # - tests
 
-def dist_per_layer_test():
-    """
-    """
-    from copy import deepcopy
-
-    import torch
-    import torch.nn as nn
-
-    from uutils.torch_uu.models.learner_from_opt_as_few_shot_paper import get_default_learner_from_default_args, \
-        get_feature_extractor_conv_layers
-    from uutils.torch_uu import approx_equal
-
-    # - very simple sanity check
-    Cin: int = 3
-    # num_out_filters: int = 8
-    mdl1: nn.Module = get_default_learner_from_default_args()
-    mdl2: nn.Module = deepcopy(mdl1)
-    layer_names = get_feature_extractor_conv_layers()
-    print(f'{layer_names=}')
-
-    # - ends up comparing two matrices of size [B, Dout], on same data, on same model
-    B: int = 5  # -- satisfies B >= (10*32)/(5**2) = 12.8 for this specific 5CNN model
-    M: int = 13  # e.g. k*n_c, satisfies B >= (10*32)/(5**2) = 12.8 for this specific 5CNN model
-    C, H, W = Cin, 84, 84
-    metric_comparison_type: str = 'pwcca'
-    X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
-    effective_neuron_type: str = 'filter'
-    subsample_effective_num_data_method: str = 'subsampling_data_to_dims_ratio'
-    subsample_effective_num_data_param: int = 10
-    metric_as_sim_or_dist: str = 'sim'
-    mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names,
-                                                                            metric_comparison_type=metric_comparison_type,
-                                                                            effective_neuron_type=effective_neuron_type,
-                                                                            subsample_effective_num_data_method=subsample_effective_num_data_method,
-                                                                            subsample_effective_num_data_param=subsample_effective_num_data_param,
-                                                                            metric_as_sim_or_dist=metric_as_sim_or_dist)
-    pprint_results(mus, stds)
-    assert (mus != stds)
-    mu, std = _stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names,
-                                         metric_comparison_type=metric_comparison_type,
-                                         effective_neuron_type=effective_neuron_type,
-                                         subsample_effective_num_data_method=subsample_effective_num_data_method,
-                                         subsample_effective_num_data_param=subsample_effective_num_data_param,
-                                         metric_as_sim_or_dist=metric_as_sim_or_dist)
-    print(f'----entire net result: {mu=}, {std=}')
-    assert (approx_equal(mu, 1.0))
-    mu2, std2 = compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(distances_per_data_sets_per_layer)
-    assert (approx_equal(mu, mu2))
-    assert (approx_equal(std, std2))
-
-    # -- differnt data different nets dist ~ 1.0, large distance, so low sim
-    X1: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
-    X2: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
-    mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names,
-                                                                            layer_names,
-                                                                            metric_comparison_type=metric_comparison_type,
-                                                                            effective_neuron_type=effective_neuron_type,
-                                                                            subsample_effective_num_data_method=subsample_effective_num_data_method,
-                                                                            subsample_effective_num_data_param=subsample_effective_num_data_param,
-                                                                            metric_as_sim_or_dist=metric_as_sim_or_dist)
-    pprint_results(mus, stds)
-    assert (mus != stds)
-    mu, std = _stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names,
-                                         metric_comparison_type=metric_comparison_type,
-                                         effective_neuron_type=effective_neuron_type,
-                                         subsample_effective_num_data_method=subsample_effective_num_data_method,
-                                         subsample_effective_num_data_param=subsample_effective_num_data_param,
-                                         metric_as_sim_or_dist=metric_as_sim_or_dist)
-    print(f'----entire net result: {mu=}, {std=}')
-    assert (approx_equal(mu, 0.0, tolerance=0.4))
-    mu2, std2 = compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(distances_per_data_sets_per_layer)
-    assert (approx_equal(mu, mu2))
-    assert (approx_equal(std, std2))
+# def dist_per_layer_test():
+#     """
+#     """
+#     from copy import deepcopy
+#
+#     import torch
+#     import torch.nn as nn
+#
+#     from uutils.torch_uu.models.learner_from_opt_as_few_shot_paper import get_default_learner_from_default_args, \
+#         get_feature_extractor_conv_layers
+#     from uutils.torch_uu import approx_equal
+#
+#     # - very simple sanity check
+#     Cin: int = 3
+#     # num_out_filters: int = 8
+#     mdl1: nn.Module = get_default_learner_from_default_args()
+#     mdl2: nn.Module = deepcopy(mdl1)
+#     layer_names = get_feature_extractor_conv_layers()
+#     print(f'{layer_names=}')
+#
+#     # - ends up comparing two matrices of size [B, Dout], on same data, on same model
+#     B: int = 5  # -- satisfies B >= (10*32)/(5**2) = 12.8 for this specific 5CNN model
+#     M: int = 13  # e.g. k*n_c, satisfies B >= (10*32)/(5**2) = 12.8 for this specific 5CNN model
+#     C, H, W = Cin, 84, 84
+#     metric_comparison_type: str = 'pwcca'
+#     X: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+#     effective_neuron_type: str = 'filter'
+#     subsample_effective_num_data_method: str = 'subsampling_data_to_dims_ratio'
+#     subsample_effective_num_data_param: int = 10
+#     metric_as_sim_or_dist: str = 'sim'
+#     mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl1, X, X, layer_names, layer_names,
+#                                                                             metric_comparison_type=metric_comparison_type,
+#                                                                             effective_neuron_type=effective_neuron_type,
+#                                                                             subsample_effective_num_data_method=subsample_effective_num_data_method,
+#                                                                             subsample_effective_num_data_param=subsample_effective_num_data_param,
+#                                                                             metric_as_sim_or_dist=metric_as_sim_or_dist)
+#     pprint_results(mus, stds)
+#     assert (mus != stds)
+#     mu, std = _stats_distance_entire_net(mdl1, mdl1, X, X, layer_names, layer_names,
+#                                          metric_comparison_type=metric_comparison_type,
+#                                          effective_neuron_type=effective_neuron_type,
+#                                          subsample_effective_num_data_method=subsample_effective_num_data_method,
+#                                          subsample_effective_num_data_param=subsample_effective_num_data_param,
+#                                          metric_as_sim_or_dist=metric_as_sim_or_dist)
+#     print(f'----entire net result: {mu=}, {std=}')
+#     assert (approx_equal(mu, 1.0))
+#     mu2, std2 = compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(distances_per_data_sets_per_layer)
+#     assert (approx_equal(mu, mu2))
+#     assert (approx_equal(std, std2))
+#
+#     # -- differnt data different nets dist ~ 1.0, large distance, so low sim
+#     X1: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+#     X2: torch.Tensor = torch.distributions.Normal(loc=0.0, scale=1.0).sample((B, M, C, H, W))
+#     mus, stds, distances_per_data_sets_per_layer = stats_distance_per_layer(mdl1, mdl2, X1, X2, layer_names,
+#                                                                             layer_names,
+#                                                                             metric_comparison_type=metric_comparison_type,
+#                                                                             effective_neuron_type=effective_neuron_type,
+#                                                                             subsample_effective_num_data_method=subsample_effective_num_data_method,
+#                                                                             subsample_effective_num_data_param=subsample_effective_num_data_param,
+#                                                                             metric_as_sim_or_dist=metric_as_sim_or_dist)
+#     pprint_results(mus, stds)
+#     assert (mus != stds)
+#     mu, std = _stats_distance_entire_net(mdl1, mdl2, X1, X2, layer_names, layer_names,
+#                                          metric_comparison_type=metric_comparison_type,
+#                                          effective_neuron_type=effective_neuron_type,
+#                                          subsample_effective_num_data_method=subsample_effective_num_data_method,
+#                                          subsample_effective_num_data_param=subsample_effective_num_data_param,
+#                                          metric_as_sim_or_dist=metric_as_sim_or_dist)
+#     print(f'----entire net result: {mu=}, {std=}')
+#     assert (approx_equal(mu, 0.0, tolerance=0.4))
+#     mu2, std2 = compute_mu_std_for_entire_net_from_all_distances_from_data_sets_tasks(distances_per_data_sets_per_layer)
+#     assert (approx_equal(mu, mu2))
+#     assert (approx_equal(std, std2))
 
 
 if __name__ == '__main__':
@@ -442,6 +444,6 @@ if __name__ == '__main__':
     import time
 
     start = time.time()
-    dist_per_layer_test()
+    # dist_per_layer_test()
     print(f'time_passed_msg = {uutils.report_times(start)}')
     print('Done, success\a')
