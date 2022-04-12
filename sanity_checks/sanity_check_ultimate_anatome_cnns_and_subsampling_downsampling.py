@@ -40,18 +40,18 @@ sim: float = get_metric(mdl1, mdl2, X, X, layer_name,
 print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
 assert (approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
-# - compute sims
-effective_neuron_type: str = 'filter'
-subsample_effective_num_data_method: str = 'subsampling_size'
-subsample_effective_num_data_param: int = 13
-metric_as_sim_or_dist: str = 'sim'
-sim: float = get_metric(mdl1, mdl2, X, X, layer_name,
-                        metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type,
-                        subsample_effective_num_data_method=subsample_effective_num_data_method,
-                        subsample_effective_num_data_param=subsample_effective_num_data_param,
-                        metric_as_sim_or_dist=metric_as_sim_or_dist)
-print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
-assert (approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
+# - compute sims, not sure if this test is really needed
+# effective_neuron_type: str = 'filter'
+# subsample_effective_num_data_method: str = 'subsampling_size'
+# subsample_effective_num_data_param: int = 13
+# metric_as_sim_or_dist: str = 'sim'
+# sim: float = get_metric(mdl1, mdl2, X, X, layer_name,
+#                         metric_comparison_type=metric_comparison_type, effective_neuron_type=effective_neuron_type,
+#                         subsample_effective_num_data_method=subsample_effective_num_data_method,
+#                         subsample_effective_num_data_param=subsample_effective_num_data_param,
+#                         metric_as_sim_or_dist=metric_as_sim_or_dist)
+# print(f'Should be very very close to 1.0: {sim=} ({metric_comparison_type=})')
+# assert (approx_equal(sim, 1.0)), f'Sim should be close to 1.0 but got {sim=}'
 
 # - compute sims
 effective_neuron_type: str = 'filter'
@@ -104,7 +104,7 @@ dist: float = get_metric(mdl1, mdl2, X, X, layer_name,
                         downsample_size=downsample_size,
                         metric_as_sim_or_dist=metric_as_sim_or_dist)
 print(f'Should be very very close to 0.0: {dist=} ({metric_comparison_type=})')
-assert (approx_equal(dist, 0.0)), f'Sim should be close to 0.0 but got {dist=}'
+assert (approx_equal(dist, 0.0)), f'Dist should be close to 0.0 but got {dist=}'
 
 # - compute dists
 effective_neuron_type: str = 'filter'
@@ -117,4 +117,4 @@ dist: float = get_metric(mdl1, mdl2, X, X, layer_name,
                         downsample_size=downsample_size,
                         metric_as_sim_or_dist=metric_as_sim_or_dist)
 print(f'Should be very very close to 0.0: {dist=} ({metric_comparison_type=})')
-assert (approx_equal(dist, 0.0)), f'Sim should be close to 0.0 but got {dist=}'
+assert (approx_equal(dist, 0.0)), f'Dim should be close to 0.0 but got {dist=}'

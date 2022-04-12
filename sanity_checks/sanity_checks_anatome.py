@@ -3,6 +3,8 @@
 """
 The similarity of the same network should always be 1.0 on same input.
 """
+from copy import deepcopy
+
 import torch
 import torch.nn as nn
 
@@ -16,7 +18,8 @@ Din: int = 10
 Dout: int = Din
 B: int = 2000
 mdl1: nn.Module = get_named_identity_one_layer_linear_model(D=Din)
-mdl2: nn.Module = mdl1
+# mdl2: nn.Module = mdl1
+mdl2: nn.Module = deepcopy(mdl1)
 layer_name = 'fc0'
 
 # - ends up comparing two matrices of size [B, Dout], on same data, on same model

@@ -44,9 +44,6 @@ os.system('pip list | grep anatome')
 import anatome
 print(f'{anatome=}')
 pprint(f'{sys.path=}')
-# print(f'{anatome.__version__=}')
-# import subprocess
-# print(subprocess.check_output(['ls', '-l']))
 
 print('\n-- start cca test --')
 
@@ -56,18 +53,13 @@ print('NOTE: original tutorial does NOT center random baseline for these experim
       'carelessness/bug or that it doesnt matter for these since b1, b2 are already centered. '
       'Tough the also forgot to center the MNIST activations, but due to BN I suspect it doesnt make a big difference.')
 
-# tutorial shapes (500, 10000) (500, 10000) based on MNIST with 500 neurons from a FCNN
-# D, N = 500, 10_000
-# D, N = 7, 12
-# D, N = 2, 3
-# D1, D2 = D, D
-
 N = 1_000
 D1, D2 = 50, 60
 
 # - creating a random baseline
 b1 = np.random.randn(D1, N)
 b2 = np.random.randn(D2, N)
+
 # we center for consistency, anatome also centers again, but it shouldn't matter
 b1 = center(b1)
 print(b1)
@@ -85,9 +77,7 @@ print(f'{b1_t.sum()=}')
 print(f'{b2_t.sum()=}')
 print(f'{b1.shape=}')
 print(f'{b1_t.shape=}')
-# st()
 
-# dims_to_keep: int = min(20, D)
 dims_to_keep: int = min(5, max(D1, D2))
 
 # ---- CCA test
