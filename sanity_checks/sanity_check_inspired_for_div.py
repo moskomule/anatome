@@ -213,8 +213,6 @@ print(f'Is it far to 0.0? {not approx_equal(dist, 0.0)} it is: {dist=}')
 assert(not approx_equal(dist, 0.0)), f' {dist=}'
 
 #%%
-
-#%%
 from copy import deepcopy
 
 import torch
@@ -232,6 +230,7 @@ Dout: int = Din
 B: int = 2000
 mdl1: nn.Module = get_named_identity_one_layer_linear_model(D=Din)
 mdl2: nn.Module = deepcopy(mdl1)
+# mdl2: nn.Module = mdl1
 layer_name = 'fc0'
 
 # - ends up comparing two matrices of size [B, Dout], on same data, on same model
