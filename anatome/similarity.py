@@ -176,6 +176,9 @@ def temporal_cca(model1_activations: torch.Tesnor, model2_activations: torch.Ten
 
     Returns:
     - time_step_correlations: Correlations for each time step.
+    
+    ref: acts debate/conv: https://chat.openai.com/c/9aae0b31-689e-415c-ba40-73a790bb2e0d
+    ref: general acts code: https://chat.openai.com/g/g-KV0CvoH8Y-python-excellent-comments-doc-strings-types/c/d50783d2-f958-49d6-a729-2bc6cf28deb7
     """
     # Ensure both activation tensors have the same shape
     assert model1_activations.shape == model2_activations.shape, "Activation shapes must match"
