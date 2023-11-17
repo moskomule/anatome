@@ -166,6 +166,36 @@ def cca(x: Tensor,
     return _cca_by_svd(x, y) if backend == 'svd' else _cca_by_qr(x, y)
 
 
+def temporal_cca(model1_activations: torch.Tesnor, model2_activations: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+    """
+    Applies time-step-wise CCA for each time step in the model activations.
+
+    Args:
+    - model1_activations: Activations from the first model [B, T, D].
+    - model2_activations: Activations from the second model [B, T, D].
+
+    Returns:
+    - time_step_correlations: Correlations for each time step.
+    """
+    # Ensure both activation tensors have the same shape
+    assert model1_activations.shape == model2_activations.shape, "Activation shapes must match"
+
+    # Initialize a list to hold correlations for each time step
+    time_step_correlations = []
+
+    # Loop over each time step
+    for t in range(model1_activations.shape[1]):
+        # Extract activations for the current time step
+        act1_t = model1_activations[:, t, :]
+        act2_t = model2_activations[:, t, :]
+
+        # Compute CCA for the current time step
+        correlations = svcca_distance(act1_t, act2_t)  # TODO: change this for other distances later if needed
+        time_step_correlations.append(correlations)
+
+    dist: torch.Tensor = sum(time_step_correlations) / len(time_step_correlations)
+    return dist, time_step_correlations
+
 def _svd_reduction(input: Tensor,
                    accept_rate: float
                    ) -> Tensor:
@@ -221,8 +251,8 @@ def _svd_reduction_keeping_fixed_dims_using_V(input: Tensor, num: int) -> Tensor
 
 def svcca_distance(x: Tensor,
                    y: Tensor,
-                   accept_rate: float,
-                   backend: str
+                   accept_rate: float = 0.99,
+                   backend: str = 'svd',
                    ) -> Tensor:
     """ Singular Vector CCA proposed in Raghu et al. 2017.
 
@@ -480,7 +510,7 @@ def _debiased_dot_product_similarity(z: Tensor,
 
 def linear_cka_distance(x: Tensor,
                         y: Tensor,
-                        reduce_bias: bool
+                        reduce_bias: bool = False,
                         ) -> Tensor:
     """ Linear CKA used in Kornblith et al. 19
     
