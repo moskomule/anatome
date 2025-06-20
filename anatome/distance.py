@@ -329,7 +329,7 @@ class Distance(object):
 
         """
         self._model1_tensors = self.extractor1(data)
-        self._model2_tensors = self.extractor1(data)
+        self._model2_tensors = self.extractor2(data)
 
     def between(self,
                 name1: str,
